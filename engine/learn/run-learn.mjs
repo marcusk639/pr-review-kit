@@ -17,6 +17,7 @@ import { buildCandidates } from './candidates.mjs';
 import { applyProposals, deterministicProposals } from './apply.mjs';
 import { mergePrecision, readPrecision, renderPrecision } from './precision.mjs';
 import { renderKnowledge, renderPrBody } from './render.mjs';
+import { runLearnCommands } from './commands.mjs';
 
 const ENGINE = dirname(dirname(fileURLToPath(import.meta.url)));
 const json = (v) => `${JSON.stringify(v, null, 2)}\n`;
@@ -76,7 +77,14 @@ export function finishLearn({ project, root, out, snapshot, files, today, distil
     [`${PROJECT_SUBDIR}/learned/precision.json`]: [json(precision), JSON.stringify(priorPrecision.byPr) !== JSON.stringify(precision.byPr)],
     ...Object.fromEntries(Object.entries(rendered).map(([f, t]) => [`${PROJECT_SUBDIR}/${f}`, [t, t !== texts[f]]])),
   };
-  const changed = Object.entries(proposed).filter(([, [, c]]) => c).map(([p]) => p);
+  let changed = Object.entries(proposed).filter(([, [, c]]) => c).map(([p]) => p);
+  const cmd = changed.length ? runLearnCommands({ root, proposed: Object.fromEntries(changed.map((p) => [p, proposed[p][0]])), commands: config.learning.commands }) : { ok: true, texts: {}, results: [] };
+  for (const [p, t] of Object.entries(cmd.texts)) proposed[p][0] = t;
+  if (!cmd.ok) {
+    const failed = cmd.results.find((r) => !r.ok);
+    notes.push(`the ${failed.kind} command \`${failed.command}\` failed on the proposed files; nothing is proposed this run`);
+    changed = [];
+  }
   const body = renderPrBody({ ...result, unresolved: [...snap.unresolved, ...result.unresolved], precisionMd: renderPrecision(precision, config), config, notes });
   const bundle = join(out, 'bundle');
   rmSync(bundle, { recursive: true, force: true });
@@ -84,7 +92,7 @@ export function finishLearn({ project, root, out, snapshot, files, today, distil
     mkdirSync(dirname(join(bundle, p)), { recursive: true });
     writeFileSync(join(bundle, p), proposed[p][0]);
   }
-  const manifest = { hasChanges: changed.length > 0, files: changed, lessons: { added: result.added.length, replaced: result.replaced.length, pruned: result.pruned.length, flagged: result.flagged.length } };
+  const manifest = { hasChanges: changed.length > 0, files: changed, commands: cmd.results.map(({ kind, ok }) => ({ kind, ok })), lessons: { added: result.added.length, replaced: result.replaced.length, pruned: result.pruned.length, flagged: result.flagged.length } };
   mkdirSync(bundle, { recursive: true });
   writeFileSync(join(bundle, 'pr-body.md'), body);
   writeFileSync(join(bundle, 'manifest.json'), json(manifest));
