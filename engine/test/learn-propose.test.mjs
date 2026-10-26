@@ -23,6 +23,7 @@ function bundle(hasChanges = true) {
 // A fake GitHub: state for the learning branch, its commits and open PRs.
 function github({ branch = null, branchCommits = [], openPr = null } = {}) {
   const calls = [];
+  const api = { calls };
   const request = async (method, path, body) => {
     calls.push({ method, path, body });
     if (method === 'GET' && path === '/repos/o/r') return { default_branch: 'main' };
@@ -34,13 +35,15 @@ function github({ branch = null, branchCommits = [], openPr = null } = {}) {
     }
     if (method === 'GET' && path.startsWith('/repos/o/r/compare/')) return { commits: branchCommits };
     if (method === 'GET' && path.startsWith('/repos/o/r/pulls?')) return openPr ? [openPr] : [];
+    if (method === 'GET' && path.startsWith('/repos/o/r/issues/')) return api.comments ?? [];
     if (method === 'POST' && path === '/repos/o/r/git/blobs') return { sha: `blob${calls.length}` };
     if (method === 'POST' && path === '/repos/o/r/git/trees') return { sha: 'newtree' };
     if (method === 'POST' && path === '/repos/o/r/git/commits') return { sha: 'c'.repeat(40) };
     if (method === 'POST' && path === '/repos/o/r/pulls') return { number: 99 };
     return {};
   };
-  return { request, calls };
+  api.request = request;
+  return api;
 }
 
 const run = (gh, dir, extra = {}) => propose({ repo: 'o/r', branch: 'pr-review/learning', bundleDir: dir, request: gh.request, ...extra });
@@ -54,7 +57,8 @@ test('first proposal: one commit on a new branch off the default branch, then on
   assert.equal(tree.base_tree, 't'.repeat(40));
   assert.deepEqual(tree.tree.map((t) => t.path), ['.pr-review/false-positives.md', '.pr-review/learned/lessons.json']);
   const pr = gh.calls.find((c) => c.path === '/repos/o/r/pulls' && c.method === 'POST').body;
-  assert.deepEqual([pr.head, pr.base, pr.body], ['pr-review/learning', 'main', 'BODY']);
+  assert.deepEqual([pr.head, pr.base], ['pr-review/learning', 'main']);
+  assert.match(pr.body, /^BODY\n\n<!-- pr-review:learning-body [0-9a-f]{16} -->$/);
   assert.match(status, /opened learning PR #99/);
 });
 
@@ -95,4 +99,30 @@ test('dry run prints the plan and writes nothing', async () => {
   await run(gh, bundle(), { dryRun: true, write: (s) => lines.push(s) });
   assert.deepEqual(writes(gh), []);
   assert.match(lines.join(''), /would commit 2 file\(s\) to pr-review\/learning/);
+});
+
+test('a PR body Marcus edited is not overwritten; the branch still updates', async () => {
+  const gh = github({ branch: 'a'.repeat(40), branchCommits: [{ author: { login: BOT } }], openPr: { number: 5, body: 'my own notes' } });
+  const status = await run(gh, bundle());
+  assert.ok(writes(gh).includes('PATCH /repos/o/r/git/refs/heads/pr-review/learning'));
+  assert.ok(!writes(gh).includes('PATCH /repos/o/r/pulls/5'));
+  assert.match(status, /body kept/);
+});
+
+test('our own unedited body is refreshed', async () => {
+  const first = github();
+  await run(first, bundle());
+  const created = first.calls.find((c) => c.method === 'POST' && c.path === '/repos/o/r/pulls').body.body;
+  assert.match(created, /<!-- pr-review:learning-body [0-9a-f]{16} -->$/);
+  const gh = github({ branch: 'a'.repeat(40), branchCommits: [{ author: { login: BOT } }], openPr: { number: 5, body: created } });
+  await run(gh, bundle());
+  assert.ok(writes(gh).includes('PATCH /repos/o/r/pulls/5'));
+});
+
+test('the edited-branch note is posted once, not every run', async () => {
+  const NOTE_LIKE = 'New learning proposals are waiting';
+  const gh = github({ branch: 'a'.repeat(40), branchCommits: [{ author: { login: 'marcusk639' } }], openPr: { number: 5 } });
+  gh.comments = [{ user: { login: BOT }, body: `${NOTE_LIKE}, but this branch has been edited by a maintainer, so it was not overwritten. Merge or close this PR to receive them.` }];
+  await run(gh, bundle());
+  assert.deepEqual(writes(gh), []);
 });

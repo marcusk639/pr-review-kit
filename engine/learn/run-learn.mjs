@@ -18,6 +18,7 @@ import { applyProposals, deterministicProposals } from './apply.mjs';
 import { mergePrecision, readPrecision, renderPrecision } from './precision.mjs';
 import { renderKnowledge, renderPrBody } from './render.mjs';
 import { runLearnCommands } from './commands.mjs';
+import { closedLearningSources } from './closed.mjs';
 import { redact } from '../lib/redact.mjs';
 
 const ENGINE = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -38,15 +39,15 @@ const consumedOf = (dir) => {
   return Array.isArray(l?.consumed) ? l.consumed.filter((x) => typeof x === 'string') : [];
 };
 
-export function prepareLearn({ project, records, recordsByPr, out, snapshot }) {
-  const { candidates, unresolved } = buildCandidates(records, project.config, lessonsOf(project.dir), consumedOf(project.dir));
+export function prepareLearn({ project, records, recordsByPr, out, snapshot, rejectedSources = [] }) {
+  const { candidates, unresolved } = buildCandidates(records, project.config, lessonsOf(project.dir), [...consumedOf(project.dir), ...rejectedSources]);
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'candidates.json'), json(candidates));
   writeFileSync(join(out, 'knowledge-files.json'), json(project.config.knowledge));
   copyFileSync(join(ENGINE, 'DISTILL.md'), join(out, 'DISTILL.md'));
   mkdirSync(dirname(snapshot), { recursive: true });
   rmSync(snapshot, { force: true });
-  writeFileSync(snapshot, JSON.stringify({ candidates, unresolved, recordsByPr }));
+  writeFileSync(snapshot, JSON.stringify({ candidates, unresolved, recordsByPr, rejectedSources }));
   chmodSync(snapshot, 0o444);
   return { candidates: candidates.length, unresolved: unresolved.length };
 }
@@ -65,7 +66,9 @@ export function finishLearn({ project, root, out, snapshot, files, today, distil
   const snap = readJson(snapshot, { candidates: [], unresolved: [], recordsByPr: {} });
   const notes = [];
   const before = lessonsOf(dir);
-  const result = applyProposals({ lessons: before, consumed: consumedOf(dir), candidates: snap.candidates, proposals: proposalsFor(distill, out, snap.candidates, config, notes), config, files, today });
+  const rejected = Array.isArray(snap.rejectedSources) ? snap.rejectedSources : [];
+  if (rejected.length) notes.push(`${rejected.length} feedback source(s) from closed learning PRs are treated as rejected and not proposed again`);
+  const result = applyProposals({ lessons: before, consumed: [...consumedOf(dir), ...rejected], candidates: snap.candidates, proposals: proposalsFor(distill, out, snap.candidates, config, notes), config, files, today });
   // Held security lessons are committed without their text: security detail
   // only ever travels through the private channel.
   for (const l of result.lessons) if (l.status === 'needs-decision' && /security/.test(l.why ?? '')) l.rule = '(withheld: see the sources)';
@@ -127,7 +130,8 @@ async function main(cmd, env = process.env) {
   if (cmd === 'collect') {
     const deps = { listPulls: (repo) => listPulls(repo, project.config.learning.windowDays), listIssueComments, listReviewComments, listReactions };
     const { records, recordsByPr, pulls } = await collect({ repo: env.REPO, project, deps });
-    const r = prepareLearn({ project, records, recordsByPr, out, snapshot });
+    const rejectedSources = await closedLearningSources({ repo: env.REPO, branch: project.config.learning.branch, request: ghRequest, currentLessons: lessonsOf(project.dir) }).catch(() => []);
+    const r = prepareLearn({ project, records, recordsByPr, out, snapshot, rejectedSources });
     console.log(`learn collect: ${pulls} PR(s), ${records.length} trusted feedback record(s), ${r.candidates} candidate(s), ${r.unresolved} unresolved`);
     if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `candidates=${r.candidates}\ndistill=${project.config.learning.distill}\n`);
   } else if (cmd === 'apply') {

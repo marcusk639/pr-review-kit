@@ -4,6 +4,7 @@
 // PR. Only paths under .pr-review/ are ever written. A branch carrying
 // any commit not authored by the bot (a maintainer's edit) is never
 // overwritten: the PR gets a note that newer proposals are waiting.
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -14,6 +15,21 @@ const BOT = 'github-actions[bot]';
 const TITLE = 'chore: pr-review learned memory from review feedback';
 const NOTE = 'New learning proposals are waiting, but this branch has been edited by a maintainer, so it was not overwritten. Merge or close this PR to receive them.';
 const notFound = (err) => err?.status === 404;
+const BODY_RE = /\n\n<!-- pr-review:learning-body ([0-9a-f]{16}) -->$/;
+const hash = (t) => createHash('sha256').update(t).digest('hex').slice(0, 16);
+// Our body carries a hash of itself; a body without a matching hash was edited.
+const stamp = (body) => `${body}\n\n<!-- pr-review:learning-body ${hash(body)} -->`;
+function ours(body) {
+  if (!body) return true;
+  const m = BODY_RE.exec(body);
+  return Boolean(m) && hash(body.slice(0, m.index)) === m[1];
+}
+
+async function noteOnce(repo, pr, request) {
+  const comments = await request('GET', `/repos/${repo}/issues/${pr.number}/comments?per_page=100`);
+  const last = (Array.isArray(comments) ? comments : []).filter((c) => c?.user?.login === BOT).pop();
+  if (last?.body !== NOTE) await request('POST', `/repos/${repo}/issues/${pr.number}/comments`, { body: NOTE });
+}
 
 function readBundle(dir) {
   const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
@@ -50,7 +66,7 @@ export async function propose({ repo, branch, bundleDir, request = ghRequest, dr
     const { commits = [] } = await request('GET', `/repos/${repo}/compare/${base}...${existing}`);
     if (commits.some((c) => c?.author?.login !== BOT)) {
       if (dryRun) write(`learning: branch ${branch} was edited by a maintainer; would only comment\n`);
-      else if (pr) await request('POST', `/repos/${repo}/issues/${pr.number}/comments`, { body: NOTE });
+      else if (pr) await noteOnce(repo, pr, request);
       return 'learning: branch edited by a maintainer; not overwritten';
     }
   }
@@ -69,10 +85,11 @@ export async function propose({ repo, branch, bundleDir, request = ghRequest, dr
   if (existing) await request('PATCH', `/repos/${repo}/git/refs/heads/${branch}`, { sha: commit.sha, force: true });
   else await request('POST', `/repos/${repo}/git/refs`, { ref: `refs/heads/${branch}`, sha: commit.sha });
   if (pr) {
-    await request('PATCH', `/repos/${repo}/pulls/${pr.number}`, { body });
+    if (!ours(pr.body)) return `learning: updated learning PR #${pr.number}; body kept (edited by a maintainer)`;
+    await request('PATCH', `/repos/${repo}/pulls/${pr.number}`, { body: stamp(body) });
     return `learning: updated learning PR #${pr.number}`;
   }
-  const created = await request('POST', `/repos/${repo}/pulls`, { title: TITLE, head: branch, base: main, body });
+  const created = await request('POST', `/repos/${repo}/pulls`, { title: TITLE, head: branch, base: main, body: stamp(body) });
   return `learning: opened learning PR #${created.number}`;
 }
 

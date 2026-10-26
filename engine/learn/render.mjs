@@ -6,7 +6,9 @@ export const END = '<!-- pr-review:learned:end -->';
 const BLOCK_RE = new RegExp(`${BEGIN}[\\s\\S]*?${END}`);
 
 const day = (at) => String(at ?? '').slice(0, 10) || 'undated';
-const scopeLine = (s) => `Scope: ${(s.paths ?? []).map((p) => `\`${p}\``).join(', ')}; class ${s.class}${s.linkTypes?.length ? `; link types: ${s.linkTypes.join(', ')}` : ''}`;
+// Paths come from finding slugs: no markdown or HTML may ride along.
+const safe = (p) => String(p ?? '').replace(/[`<>]/g, '');
+const scopeLine = (s) => `Scope: ${(s.paths ?? []).map((p) => `\`${safe(p)}\``).join(', ')}; class ${s.class}${s.linkTypes?.length ? `; link types: ${s.linkTypes.join(', ')}` : ''}`;
 const sourcesLine = (srcs) => `Sources: ${(srcs ?? []).map((x) => `${x.url} (#${x.pr}, ${day(x.at)})`).join('; ')}`;
 
 // One line, no HTML comments: a rule can never close the managed block.
