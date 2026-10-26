@@ -86,3 +86,23 @@ test('notes are redacted, capped and never carry a withheld path', async () => {
   assert.match(f.file, /^withheld:[0-9a-f]{8}$/);
   assert.ok(f.note.length <= 300);
 });
+
+test('parseOnly reports the parser message with its line, and a missing interpreter separately', async () => {
+  const { parseOnly } = await import('../lib/parse-only.mjs');
+  const b = parseOnly('bash', 'echo ok\nif true; then\n');
+  assert.equal(b.ok, false);
+  assert.match(b.error, /line \d+/);
+  const n = parseOnly('node', 'const a = 1;\nconst x = ;');
+  assert.equal(n.ok, false);
+  assert.match(n.error, /:2\b|line 2|SyntaxError/);
+  assert.notEqual(n.error, 'parse error');
+  const p = parseOnly('python', 'x = 1\ndef (:');
+  assert.match(p.error, /line 2/);
+  const old = process.env.PATH;
+  process.env.PATH = '/nonexistent';
+  try {
+    assert.deepEqual(parseOnly('python', 'x=1'), { ok: false, error: 'interpreter missing: python3', missing: true });
+  } finally {
+    process.env.PATH = old;
+  }
+});

@@ -10,13 +10,26 @@ import { join } from 'node:path';
 const MAX_IN = 2 * 1024 * 1024;
 const PY = 'import ast,sys\ntry:\n    ast.parse(sys.stdin.read())\nexcept SyntaxError as e:\n    print(f"line {e.lineno}: {e.msg}"); sys.exit(1)\n';
 
+// The parser's own message (stdout for the python helper, stderr for bash and
+// node), with node's file:line folded into "line N:". ENOENT is not a syntax
+// error: it says the interpreter is missing.
+function message(cmd, err) {
+  const out = `${String(err?.stdout ?? '').trim()}\n${String(err?.stderr ?? '').trim()}`.trim();
+  if (cmd === process.execPath) {
+    const line = /input\.mjs:(\d+)/.exec(out)?.[1];
+    const what = out.split('\n').find((l) => /Error/.test(l)) ?? 'syntax error';
+    return `${line ? `line ${line}: ` : ''}${what.trim()}`;
+  }
+  return (out.split('\n').find((l) => l.trim()) ?? 'parse error').replace(/^bash: /, '');
+}
+
 function run(cmd, args, input, cwd) {
   try {
     execFileSync(cmd, args, { cwd, input, env: { PATH: process.env.PATH ?? '/usr/bin:/bin' }, stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000, maxBuffer: 64 * 1024 });
     return { ok: true };
   } catch (err) {
-    const first = String(err?.stdout || err?.stderr || 'parse error').split('\n').find((l) => l.trim()) ?? 'parse error';
-    return { ok: false, error: first.slice(0, 200) };
+    if (err?.code === 'ENOENT') return { ok: false, error: `interpreter missing: ${cmd === process.execPath ? 'node' : cmd}`, missing: true };
+    return { ok: false, error: message(cmd, err).slice(0, 200) };
   }
 }
 

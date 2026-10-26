@@ -68,3 +68,46 @@ test('the diff stub and the Read deny use one semantic, and the .pr-head variant
   const nested = DIFF.replace(/notes\/private\.md/g, 'notes/deep/private.md');
   assert.match(withholdDiff(nested), /Jane/, '* stays within one segment in both');
 });
+
+test('cpa-consulting client-data globs: deny, stub and .pr-head deny agree', async () => {
+  const { writeMaterial } = await import('../lib/material.mjs');
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, mkdirSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join, dirname } = await import('node:path');
+  const globs = ['docs/firm/**', 'firm-operations/**', '**/*.xlsx', '**/*.csv'];
+  use(globs);
+  const deny = withheldDenies('/ws').split(',');
+  for (const g of globs) {
+    assert.ok(deny.includes(`Read(//ws/${g})`), g);
+    assert.ok(deny.includes(`Read(//ws/${g}.pr-head)`), `${g} .pr-head`);
+  }
+  const root = mkdtempSync(join(tmpdir(), 'cpa-'));
+  const g = (...a) => execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { cwd: root, encoding: 'utf8' }).trim();
+  const put = (p, t) => {
+    mkdirSync(dirname(join(root, p)), { recursive: true });
+    writeFileSync(join(root, p), t);
+  };
+  g('init', '-q', '-b', 'main');
+  put('README.md', 'x\n');
+  g('add', '-A');
+  g('commit', '-qm', 'base');
+  const base = g('rev-parse', 'HEAD');
+  const secret = { 'docs/firm/client-a.md': 'CLIENT-A-SECRET', 'firm-operations/sop.md': 'SOP-SECRET', 'data/ledger.xlsx': 'XLSX-SECRET', 'deep/x/fees.csv': 'CSV-SECRET', 'firm.csv': 'ROOT-CSV-SECRET' };
+  for (const [p, t] of Object.entries(secret)) put(p, `${t}\n`);
+  put('docs/public.md', 'PUBLIC-OK\n');
+  g('add', '-A');
+  g('commit', '-qm', 'head');
+  const head = g('rev-parse', 'HEAD');
+  const diffText = g('diff', `${base}..${head}`);
+  const out = mkdtempSync(join(tmpdir(), 'cpa-out-'));
+  writeMaterial(out, { baseSha: base, headSha: head, tier: 'incremental', incrementText: `${diffText}\n`, cwd: root });
+  for (const f of ['pr.diff', 'increment.diff']) {
+    const text = readFileSync(join(out, f), 'utf8');
+    for (const [p, t] of Object.entries(secret)) {
+      assert.doesNotMatch(text, new RegExp(t), `${f}: ${p}`);
+      assert.match(text, new RegExp(`diff --git a/${p.replace(/\./g, '\\.')} b/${p.replace(/\./g, '\\.')}\\n\\[content withheld by config`), `${f}: ${p} stubbed`);
+    }
+    assert.match(text, /PUBLIC-OK/, `${f}: non-withheld content kept`);
+  }
+});
