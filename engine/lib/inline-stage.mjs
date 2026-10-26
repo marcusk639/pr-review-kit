@@ -18,11 +18,11 @@ const isObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v)
 const status = (err) => (Number.isInteger(err?.status) ? err.status : 'unknown');
 const strings = (l) => (Array.isArray(l) ? l.filter((s) => typeof s === 'string') : []);
 
-// Current security findings' files, plus any path (or path-like token of a
-// body) hashing to a prior security fileId (keyed only).
+// Current security findings' files, plus any path (a changed file, or a
+// path-like token of a body) hashing to a prior security fileId (keyed only).
 function securityPathTest(findings, snapshot, key) {
   const ids = priorFileIds(sanitizeLedger(isObject(snapshot) ? snapshot.ledger : [], key));
-  const needles = runNeedles(findings, [], ids, key);
+  const needles = runNeedles(findings, [], ids, key, strings(snapshot?.changedFiles));
   const namesPrior = (t) => candidatePaths([], [t]).some((p) => isPriorSecurityPath(p, ids, key));
   const test = (t) => mentions(t, needles) || isPriorSecurityPath(t, ids, key) || namesPrior(t);
   return { test, needles };

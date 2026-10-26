@@ -59,7 +59,7 @@ test('a completed review with no findings says "No issues found" and reports its
   const { posted, reports, status } = await run();
   assert.match(posted[0], /No issues found/);
   assert.deepEqual(reports, [status]);
-  assert.match(status, /^summary updated: complete review; 0 inline comment\(s\) posted$/);
+  assert.match(status, /^summary updated: complete review \(tier full\); 0 inline comment\(s\) posted$/);
 });
 
 test('findings.json without complete: true is not a completed review', async () => {

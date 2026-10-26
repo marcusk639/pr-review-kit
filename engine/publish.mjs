@@ -106,8 +106,9 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
   }
   // Only what publish itself posted counts; the model's own flag is ignored.
   const findings = { ...completed, findings: completed.findings.map((f) => ({ ...f, inlinePosted: inlinePosted.has(f.slug) })) };
-  // Built once: current security files plus paths hashing to prior security fileIds.
-  const needles = runNeedles(findings.findings, [narrative ?? ''], priorFileIds(prior.ledger), idKey);
+  // Built once: current security files plus paths (finding locations, narrative
+  // tokens, the PR's changed files) hashing to prior security fileIds.
+  const needles = runNeedles(findings.findings, [narrative ?? ''], priorFileIds(prior.ledger), idKey, strings(s.changedFiles));
   // The trusted head (workflow env, then snapshot); the model's reviewedSha is ignored.
   const reviewed = sha(headSha) ?? sha(s.headSha) ?? prior.lastReviewedSha;
   // Entries this run re-reports: by keyed id (security, withheld) or by slug (public).
@@ -154,6 +155,10 @@ function previousMarker(snapshot, fallback, rawMarker, idKey) {
   const p = priorPayload(isObject(snapshot) ? snapshot : fallback?.state, idKey, knownLinkTypes());
   return encodeLedger(fitMarker(p, encodeLedger, MAX_MARKER));
 }
+
+// The tier for the status line: facts' fixed vocabulary only, never free text.
+const TIER_RE = /^[a-z][a-z-]{0,29}$/;
+const tierOf = (s) => (isObject(s) && TIER_RE.test(String(s.tier)) ? ` (tier ${s.tier})` : '');
 
 // Without a trusted snapshot and without the comment, nothing is posted: the
 // old comment (and its marker) stays as it was. The same holds when facts could
@@ -214,7 +219,7 @@ async function publishRun({ repo, pr, snapshot: trusted, advisoryToken, ...rest 
   const notices = [...(prior.notice ? [prior.notice] : []), ...inline.notices];
   const body = composeBody({ ...rest, state: snapshot, fallback, securityClause: clause, resolvedIds, notices, inlinePosted: inline.posted, rawMarker: prior.rawMarker ?? null });
   const ok = await postSummary(repo, pr, body, deps.upsertSummary, { headSha, previousMarker: previousMarker(snapshot, fallback, prior.rawMarker, rest.idKey || null) });
-  const label = outcomeLabel(snapshot, rest);
+  const label = `${outcomeLabel(snapshot, rest)}${tierOf(snapshot)}`;
   const tail = extra.map((e) => `; ${e}`).join('');
   return ok ? `summary updated: ${label}; ${inline.posted.size} inline comment(s) posted${tail}` : `summary update failed (${label}); minimal banner attempted${tail}`;
 }
