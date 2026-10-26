@@ -23,7 +23,7 @@ after(() => {
   for (const p of [root, out, join(snap, '..')]) rmSync(p, { recursive: true, force: true });
 });
 
-const project = () => loadProject(join(root, '.claude/pr-review'));
+const project = () => loadProject(join(root, '.pr-review'));
 const files = ['src/api.ts', 'web/client.ts'];
 
 test('prepare writes the model material to OUT and a trusted snapshot outside it', () => {
@@ -49,16 +49,16 @@ test('finish falls back to the deterministic distiller when the model wrote noth
   assert.equal(r.manifest.lessons.added, 1);
   assert.match(r.body, /model proposals unusable; deterministic distillation used/);
   const bundle = join(out, 'bundle');
-  const fp = readFileSync(join(bundle, '.claude/pr-review/false-positives.md'), 'utf8');
+  const fp = readFileSync(join(bundle, '.pr-review/false-positives.md'), 'utf8');
   assert.match(fp, /Intentional: the scheduler retries this\./);
-  const lessons = JSON.parse(readFileSync(join(bundle, '.claude/pr-review/learned/lessons.json'), 'utf8'));
+  const lessons = JSON.parse(readFileSync(join(bundle, '.pr-review/learned/lessons.json'), 'utf8'));
   assert.equal(lessons.lessons.length, 1);
-  assert.ok(existsSync(join(bundle, '.claude/pr-review/learned/precision.json')));
+  assert.ok(existsSync(join(bundle, '.pr-review/learned/precision.json')));
   assert.ok(existsSync(join(bundle, 'pr-body.md')));
   const manifest = JSON.parse(readFileSync(join(bundle, 'manifest.json'), 'utf8'));
   assert.equal(manifest.hasChanges, true);
-  assert.ok(manifest.files.includes('.claude/pr-review/false-positives.md'));
-  assert.ok(manifest.files.every((f) => f.startsWith('.claude/pr-review/')), 'the bundle only ever touches the reviewer project');
+  assert.ok(manifest.files.includes('.pr-review/false-positives.md'));
+  assert.ok(manifest.files.every((f) => f.startsWith('.pr-review/')), 'the bundle only ever touches the reviewer project');
 });
 
 test('no feedback and nothing stale means no changes', () => {

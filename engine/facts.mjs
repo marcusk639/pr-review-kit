@@ -20,6 +20,8 @@ import { runPaths } from './lib/paths.mjs';
 import { PROJECT_SUBDIR, activeProject, setActiveProject } from './lib/config.mjs';
 import { loadReviewProject } from './lib/project.mjs';
 import { loadProjectChecks, runProjectChecks } from './lib/project-checks.mjs';
+import { readAt } from './lib/git-read.mjs';
+import { withheldDenies } from './lib/withheld.mjs';
 import { buildFacts } from './lib/facts-render.mjs';
 import { checkSecrets, checkPiiLogs, checkNewFileSize, checkTitleScope, checkSelfEdit, checkEnginePin, runVerifyDiff } from './hygiene.mjs';
 
@@ -64,7 +66,7 @@ function runChecks({ files, repoRoot, baseSha, headSha, title, baseDir, projectC
     ['checkNewFileSize', () => checkNewFileSize(files, repoRoot)],
     ['checkTitleScope', () => checkTitleScope(title)],
     ['checkSelfEdit', () => checkSelfEdit(files)],
-    ['checkEnginePin', () => checkEnginePin({ base: readOr(join(baseDir, config.workflowPath)), head: readOr(join(repoRoot, config.workflowPath)) })],
+    ['checkEnginePin', () => checkEnginePin({ base: readOr(join(baseDir, config.workflowPath)), head: readAt(headSha, config.workflowPath, repoRoot) })],
     ['runVerifyDiff', () => runVerifyDiff(baseSha, repoRoot, verify, headSha)],
   ];
   const builtin = checks.map(([check, fn]) => {
@@ -77,8 +79,12 @@ function runChecks({ files, repoRoot, baseSha, headSha, title, baseDir, projectC
   return [...builtin, ...runProjectChecks(projectChecks, { files, repoRoot, baseSha, headSha, title, config })];
 }
 
-function tierOutput(tier, maxTurns) {
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `tier=${tier}\nmax_turns=${maxTurns}\n`);
+let tierWritten = false;
+// The review step runs only when this wrote a tier other than none. extra_deny
+// carries the model's Read denies for config.withheld paths.
+function tierOutput(tier, maxTurns, extraDeny = '') {
+  tierWritten = true;
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `tier=${tier}\nmax_turns=${maxTurns}\nextra_deny=${extraDeny ? `,${extraDeny}` : ''}\n`);
 }
 
 const UNAVAILABLE_RE = /(^|\s)unavailable(:|$)/;
@@ -105,7 +111,8 @@ function writeOutputs({ out, stateFile }, text, state) {
   } catch {
     process.stdout.write('facts: state snapshot unavailable\n');
   }
-  tierOutput(state.tier, state.maxTurns);
+  // A tier whose turn cap is 0 does not run the model.
+  tierOutput(state.maxTurns > 0 ? state.tier : 'none', state.maxTurns, withheldDenies(process.cwd()));
 }
 
 // This run's routed link types (the files it considered) ride in both
@@ -128,7 +135,7 @@ function githubDeps(env) {
 // The project from the base checkout, or null (then: tier none, no review).
 export async function prepareProject(baseDir) {
   const dir = join(baseDir, PROJECT_SUBDIR);
-  if (!existsSync(join(dir, 'config.json'))) return { project: null, why: 'no .claude/pr-review/config.json on the base branch yet' };
+  if (!existsSync(join(dir, 'config.json'))) return { project: null, why: 'no .pr-review/config.json on the base branch yet' };
   const project = loadReviewProject(dir);
   if (project.errors.length) return { project: null, why: `invalid project config: ${project.errors.slice(0, 5).join('; ')}` };
   const loaded = await loadProjectChecks(dir, project.config.checks.project);
@@ -218,5 +225,11 @@ async function main() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  main().catch(() => process.stdout.write('facts failed: Error\n')).finally(() => { process.exitCode = 0; });
+  main()
+    .catch(() => process.stdout.write('facts failed: Error\n'))
+    .finally(() => {
+      // Fail closed: any path that did not decide a tier skips the model.
+      if (!tierWritten) tierOutput('none', 0);
+      process.exitCode = 0;
+    });
 }

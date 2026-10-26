@@ -44,7 +44,7 @@ export async function runPublish(env = process.env, opts = {}) {
     return 'skipped: project config';
   }
   setActiveProject(project);
-  const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, PR_REVIEW_ID_KEY, ADVISORY_TOKEN, RUN_STARTED_AT } = env;
+  const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, PR_REVIEW_ID_KEY, ADVISORY_TOKEN, PRIVATE_ISSUE_TOKEN, PR_REVIEW_PRIVATE_REPO, RUN_STARTED_AT } = env;
   // Fail closed without OUT and STATE_FILE: no snapshot, no model output, so
   // the failure banner (prior state from the comment) or nothing at all.
   const run = runPaths(env);
@@ -69,6 +69,9 @@ export async function runPublish(env = process.env, opts = {}) {
     idKey: PR_REVIEW_ID_KEY || null,
     // Advisory requests only; never passed to the summary comment calls.
     advisoryToken: ADVISORY_TOKEN || null,
+    // private-repo-issue only: the inbox repo (a repository variable) and its PAT.
+    issueToken: PRIVATE_ISSUE_TOKEN || null,
+    privateRepo: PR_REVIEW_PRIVATE_REPO || null,
   }, deps);
 }
 

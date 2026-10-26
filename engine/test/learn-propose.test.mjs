@@ -10,7 +10,7 @@ const BOT = 'github-actions[bot]';
 
 function bundle(hasChanges = true) {
   const dir = mkdtempSync(join(tmpdir(), 'bundle-'));
-  const files = hasChanges ? ['.claude/pr-review/false-positives.md', '.claude/pr-review/learned/lessons.json'] : [];
+  const files = hasChanges ? ['.pr-review/false-positives.md', '.pr-review/learned/lessons.json'] : [];
   for (const f of files) {
     mkdirSync(join(dir, f, '..'), { recursive: true });
     writeFileSync(join(dir, f), `content of ${f}\n`);
@@ -52,7 +52,7 @@ test('first proposal: one commit on a new branch off the default branch, then on
   assert.deepEqual(writes(gh), ['POST /repos/o/r/git/blobs', 'POST /repos/o/r/git/blobs', 'POST /repos/o/r/git/trees', 'POST /repos/o/r/git/commits', 'POST /repos/o/r/git/refs', 'POST /repos/o/r/pulls']);
   const tree = gh.calls.find((c) => c.path === '/repos/o/r/git/trees').body;
   assert.equal(tree.base_tree, 't'.repeat(40));
-  assert.deepEqual(tree.tree.map((t) => t.path), ['.claude/pr-review/false-positives.md', '.claude/pr-review/learned/lessons.json']);
+  assert.deepEqual(tree.tree.map((t) => t.path), ['.pr-review/false-positives.md', '.pr-review/learned/lessons.json']);
   const pr = gh.calls.find((c) => c.path === '/repos/o/r/pulls' && c.method === 'POST').body;
   assert.deepEqual([pr.head, pr.base, pr.body], ['pr-review/learning', 'main', 'BODY']);
   assert.match(status, /opened learning PR #99/);
@@ -81,11 +81,11 @@ test('no changes: nothing is written', async () => {
   assert.match(status, /no changes/);
 });
 
-test('bundle paths outside .claude/pr-review are refused', async () => {
+test('bundle paths outside .pr-review are refused', async () => {
   const dir = bundle();
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ hasChanges: true, files: ['.github/workflows/pr-review.yml'] }));
   const gh = github();
-  await assert.rejects(run(gh, dir), /outside \.claude\/pr-review/);
+  await assert.rejects(run(gh, dir), /outside \.pr-review/);
   assert.deepEqual(writes(gh), []);
 });
 

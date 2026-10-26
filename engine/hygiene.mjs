@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import { redact, secretPatterns } from './lib/redact.mjs';
 import { git } from './lib/diff.mjs';
 import { activeProject } from './lib/config.mjs';
@@ -8,8 +8,8 @@ import { activeProject } from './lib/config.mjs';
 // Every check reads its settings from the project's config.checks; a check set
 // to false returns no facts.
 const checks = () => activeProject().config.checks;
-const REVIEW_DIR = /^\.claude\/pr-review\//;
-// pull_request runs the PR's own workflow file; .claude/pr-review/** is restored from base.
+const REVIEW_DIR = /^\.pr-review\//;
+// pull_request runs the PR's own workflow file; .pr-review/** is restored from base.
 const SELF_EDIT_NOTE = {
   workflow: 'PR edits the review workflow; this edit takes effect in this run (pull_request runs the PR\'s workflow file)',
   learn: 'PR edits the learning workflow; it takes effect when the learning workflow next runs from the default branch',
@@ -63,7 +63,9 @@ export function checkNewFileSize(files, repoRoot) {
   for (const f of files) {
     if (f.status !== 'A' || f.binary || !CODE.test(f.file)) continue;
     const p = join(repoRoot, f.file);
-    if (!existsSync(p)) continue;
+    // Never follow a link the PR planted (it could point at runner files):
+    // the file itself and every parent must resolve inside the checkout.
+    if (!existsSync(p) || lstatSync(p).isSymbolicLink() || !realpathSync(p).startsWith(realpathSync(repoRoot) + sep)) continue;
     const text = readFileSync(p, 'utf8');
     const lines = text.length === 0 ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
     if (lines > cfg.maxLines) facts.push(fact('file-size', f.file, null, `new file is ${lines} lines (limit ${cfg.maxLines}); split into modules`));

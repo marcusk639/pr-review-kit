@@ -88,8 +88,8 @@ function repoWith(baseConfig, { workflowBase, workflowHead } = {}) {
   const baseDir = join(root, '.review-base');
   mkdirSync(baseDir);
   if (baseConfig) {
-    write(join(baseDir, '.claude/pr-review/config.json'), JSON.stringify(baseConfig));
-    write(join(baseDir, '.claude/pr-review/routing.json'), JSON.stringify([{ linkType: 'api', paths: ['src/**'], counterparts: [], classes: [1] }]));
+    write(join(baseDir, '.pr-review/config.json'), JSON.stringify(baseConfig));
+    write(join(baseDir, '.pr-review/routing.json'), JSON.stringify([{ linkType: 'api', paths: ['src/**'], counterparts: [], classes: [1] }]));
   }
   if (workflowBase) write(join(baseDir, '.github/workflows/pr-review.yml'), workflowBase);
   return { root, base, head, baseDir };
@@ -138,4 +138,11 @@ test('a changed kit pin in the PR workflow is a fact', () => {
   const wf = (c) => `jobs:\n  r:\n    steps:\n      - uses: marcusk639/pr-review-kit/actions/review@${SHA(c)}\n`;
   const r = runFacts(repoWith(CONFIG, { workflowBase: wf('a'), workflowHead: wf('b') }));
   assert.match(readFileSync(join(r.out, 'facts.md'), 'utf8'), /\[engine-pin\].*kit pin changed from aaaaaaa to bbbbbbb/);
+});
+
+test('a malformed base config never lets the model run without material', () => {
+  for (const bad of [{ ...CONFIG, trust: null }, { ...CONFIG, checks: { verifyDiff: true } }, { ...CONFIG, secrets: { extraPatterns: 'x' } }]) {
+    const r = runFacts(repoWith(bad));
+    assert.match(r.ghOutput, /tier=none/, JSON.stringify(bad));
+  }
 });

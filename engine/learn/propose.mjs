@@ -1,7 +1,7 @@
 // The learning PR (model-free; the only learning step with a write token).
 // Commits the bundle from the apply step as one commit on the learning branch,
 // based on the current default branch, and opens or updates the one learning
-// PR. Only paths under .claude/pr-review/ are ever written. A branch carrying
+// PR. Only paths under .pr-review/ are ever written. A branch carrying
 // any commit not authored by the bot (a maintainer's edit) is never
 // overwritten: the PR gets a note that newer proposals are waiting.
 import { readFileSync } from 'node:fs';

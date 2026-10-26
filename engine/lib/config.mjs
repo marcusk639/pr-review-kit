@@ -1,32 +1,40 @@
-// The consumer's engine config (.claude/pr-review/config.json) and routing
+// The consumer's engine config (.pr-review/config.json) and routing
 // table, both read from a base-branch checkout, never the PR head. Defaults
 // reproduce the recovery-platform reference wherever it had one. Validation
 // returns errors instead of throwing: facts and publish fail closed on them.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { apply, bool, custom, int, list, map, num, obj, oneOf, orFalse, regex, str } from './config-schema.mjs';
 
 // Where a consumer keeps its reviewer project, relative to a checkout root.
-export const PROJECT_SUBDIR = '.claude/pr-review';
+export const PROJECT_SUBDIR = '.pr-review';
+
 
 const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
+const TIERS = ['none', 'base-drift', 'light', 'incremental', 'incremental-new-links', 'full'];
 const PROJECT_RE = /^[A-Za-z0-9._-]{1,60}$/;
+const BRANCH_RE = /^[A-Za-z0-9._/-]{1,100}$/;
+const PROTECTED_BRANCHES = new Set(['main', 'master', 'develop', 'trunk', 'production']);
 
 export const DEFAULTS = Object.freeze({
   version: 1,
   project: 'project',
   visibility: 'public',
   securityChannel: null,
-  privateReaders: [],
   workflowPath: '.github/workflows/pr-review.yml',
   learnWorkflowPath: '.github/workflows/pr-review-learn.yml',
   packages: [],
   knowledge: ['checklist.md', 'conventions.md', 'false-positives.md'],
   classes: [],
-  tiers: { enabled: true, maxTurns: { none: 0, 'base-drift': 15, light: 15, incremental: 40, 'incremental-new-links': 60, full: 60 }, largeShare: 0.5 },
+  tiers: { set: 'all', disabled: [], maxTurns: { none: 0, 'base-drift': 15, light: 15, incremental: 40, 'incremental-new-links': 60, full: 60 }, largeShare: 0.5 },
   lightFiles: ['**/*.md', '**/*.txt', '**/*.png', '**/*.jpg', '**/*.svg', '**/pnpm-lock.yaml', '**/package-lock.json', '**/yarn.lock'],
+  lightExclude: [],
+  withheld: [],
+  externalCheckouts: [],
   largePr: { files: 60, lines: 5000 },
   inline: { max: 10, severities: ['Critical', 'High'] },
-  secrets: { extraPatterns: [] },
+  secrets: { extraPatterns: [], allowPaths: [], allowPatterns: [] },
+  issueBody: { extraPatterns: [] },
   checks: {
     secrets: true,
     piiLogs: { fields: 'email|phone|address|password|token', logCall: '\\b(?:logger|console)\\.' },
@@ -34,68 +42,106 @@ export const DEFAULTS = Object.freeze({
     titleScope: false,
     selfEdit: true,
     verifyDiff: false,
+    writeCollaborators: false,
     project: [],
   },
-  trust: { contextAssociations: ['OWNER', 'MEMBER', 'COLLABORATOR'], feedbackAuthors: [] },
-  learning: { windowDays: 45, repeatThreshold: 2, maxLessons: 40, demote: { minVotes: 5, maxPrecision: 0.4 }, distill: 'model', branch: 'pr-review/learning' },
+  trust: { contextAssociations: ['OWNER', 'MEMBER', 'COLLABORATOR'], feedbackAuthors: ['repository-owner'] },
+  learning: { windowDays: 45, repeatThreshold: 2, maxLessons: 40, demote: { minVotes: 5, maxPrecision: 0.4 }, distill: 'model', branch: 'pr-review/learning', forbidden: [], commands: { format: [], validate: [] } },
 });
 
-const KEYS = new Set(Object.keys(DEFAULTS));
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
-const strs = (v) => Array.isArray(v) && v.every((s) => typeof s === 'string');
+const strList = list(str);
+const globs = list(str);
+const strs = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
 
-// One level of merge for object-valued keys, two for tiers.maxTurns and learning.demote.
-function merge(raw) {
-  const c = structuredClone(DEFAULTS);
-  for (const [k, v] of Object.entries(raw)) {
-    if (!KEYS.has(k)) continue;
-    if (isObj(c[k]) && isObj(v)) {
-      for (const [k2, v2] of Object.entries(v)) c[k][k2] = isObj(c[k][k2]) && isObj(v2) ? { ...c[k][k2], ...v2 } : v2;
-    } else c[k] = v;
+const classNode = obj({
+  id: int(1, 999),
+  name: str,
+  security: bool,
+  always: bool,
+  light: bool,
+  protected: bool,
+  minConfidence: oneOf('low', 'medium', 'high'),
+});
+
+const checkoutNode = custom((v, d, path, errors) => {
+  const ok = isObj(v) && /^[\w.-]+\/[\w.-]+$/.test(v.repo ?? '') && typeof v.ref === 'string' && BRANCH_RE.test(v.ref) && /^[\w.-]{1,60}$/.test(v.dir ?? '') && (v.sparse === undefined || (Array.isArray(v.sparse) && v.sparse.every((x) => typeof x === 'string' && !x.includes('..'))));
+  if (!ok) {
+    errors.push(`${path} must be { repo: "owner/name", ref, dir (one path segment), sparse?: [paths] }`);
+    return undefined;
   }
-  if (c.securityChannel == null) c.securityChannel = c.visibility === 'private' ? 'none' : 'advisory';
-  return c;
-}
+  return { repo: v.repo, ref: v.ref, dir: v.dir, sparse: v.sparse ?? [] };
+});
+
+const SCHEMA = obj({
+  version: int(1, 1),
+  project: custom((v, d, path, errors) => (typeof v === 'string' && PROJECT_RE.test(v) ? v : (errors.push('project must match [A-Za-z0-9._-]{1,60}'), d))),
+  visibility: oneOf('public', 'private'),
+  securityChannel: oneOf('advisory', 'private-repo-issue', 'none'),
+  workflowPath: str,
+  learnWorkflowPath: str,
+  packages: strList,
+  knowledge: strList,
+  classes: list(classNode),
+  tiers: obj({ set: oneOf('all', 'none-light-full', 'full'), disabled: list(oneOf('base-drift', 'light', 'incremental', 'incremental-new-links')), maxTurns: map(int(0, 200), TIERS), largeShare: num(0, 1) }),
+  lightFiles: globs,
+  lightExclude: globs,
+  withheld: globs,
+  externalCheckouts: list(checkoutNode),
+  largePr: obj({ files: int(1, 100000), lines: int(1, 10000000) }),
+  inline: obj({ max: int(0, 50), severities: list(oneOf(...SEVERITIES)) }),
+  secrets: obj({ extraPatterns: list(regex), allowPaths: globs, allowPatterns: list(regex) }),
+  issueBody: obj({ extraPatterns: list(regex) }),
+  checks: obj({
+    secrets: bool,
+    piiLogs: orFalse(obj({ fields: regex, logCall: regex })),
+    newFileSize: orFalse(obj({ maxLines: int(1, 100000), pattern: regex })),
+    titleScope: orFalse(obj({ bareScopes: strList })),
+    selfEdit: bool,
+    verifyDiff: orFalse(obj({ script: str })),
+    writeCollaborators: orFalse(obj({ allowed: strList })),
+    project: strList,
+  }),
+  trust: obj({ contextAssociations: strList, feedbackAuthors: strList }),
+  learning: obj({
+    windowDays: int(1, 365),
+    repeatThreshold: int(2, 50),
+    maxLessons: int(1, 500),
+    demote: obj({ minVotes: int(1, 1000), maxPrecision: num(0, 1) }),
+    distill: oneOf('model', 'deterministic'),
+    branch: str,
+    forbidden: strList,
+    commands: obj({ format: strList, validate: strList }),
+  }),
+});
 
 function checkClasses(classes, errors) {
-  if (!Array.isArray(classes) || !classes.length) return errors.push('classes: at least one bug class is required');
+  if (!classes.length) return errors.push('classes: at least one bug class is required');
   const seen = new Set();
   for (const k of classes) {
-    if (!isObj(k) || !Number.isInteger(k.id) || k.id < 1 || k.id > 999) errors.push(`class id must be an integer 1-999: ${JSON.stringify(k?.id)}`);
+    if (!Number.isInteger(k.id) || typeof k.name !== 'string') errors.push(`class ${JSON.stringify(k.id)}: id and name are required`);
     else if (seen.has(k.id)) errors.push(`duplicate class id ${k.id}`);
-    else if (typeof k.name !== 'string' || !k.name.trim()) errors.push(`class ${k.id}: name required`);
-    if (isObj(k)) seen.add(k.id);
+    seen.add(k.id);
   }
 }
 
 export function normalizeConfig(raw) {
   const errors = [];
-  if (!isObj(raw)) return { config: merge({}), errors: ['config must be a JSON object'] };
-  for (const k of Object.keys(raw)) if (!KEYS.has(k)) errors.push(`unknown key: ${k}`);
-  const c = merge(raw);
-  if (c.version !== 1) errors.push('version must be 1');
-  if (typeof c.project !== 'string' || !PROJECT_RE.test(c.project)) errors.push('project must match [A-Za-z0-9._-]{1,60}');
-  if (!['public', 'private'].includes(c.visibility)) errors.push('visibility must be "public" or "private"');
-  if (!['advisory', 'repo-comments', 'none'].includes(c.securityChannel)) errors.push('securityChannel must be advisory, repo-comments or none');
-  if (c.securityChannel === 'repo-comments' && c.visibility !== 'private') errors.push('securityChannel repo-comments requires visibility private');
+  if (!isObj(raw)) return { config: { ...structuredClone(DEFAULTS), securityChannel: 'advisory' }, errors: ['config must be a JSON object'] };
+  const c = apply(SCHEMA, raw, DEFAULTS, '', errors);
+  if (raw.version === undefined) errors.push('version must be 1');
+  if (c.securityChannel == null) c.securityChannel = c.visibility === 'private' ? 'private-repo-issue' : 'advisory';
   if (c.securityChannel === 'advisory' && c.visibility !== 'public') errors.push('securityChannel advisory requires visibility public (advisories are public-repo only)');
-  if (c.securityChannel === 'repo-comments' && (!strs(c.privateReaders) || !c.privateReaders.length)) errors.push('securityChannel repo-comments requires privateReaders');
+  if (!BRANCH_RE.test(c.learning.branch) || PROTECTED_BRANCHES.has(c.learning.branch)) errors.push('learning.branch must be a dedicated branch name, not a default branch');
   checkClasses(c.classes, errors);
-  if (!strs(c.packages) || !strs(c.knowledge) || !strs(c.lightFiles)) errors.push('packages, knowledge and lightFiles must be string arrays');
-  if (!strs(c.inline.severities) || c.inline.severities.some((s) => !SEVERITIES.includes(s))) errors.push('inline.severities must list severities');
-  if (!Number.isInteger(c.inline.max) || c.inline.max < 0 || c.inline.max > 50) errors.push('inline.max must be 0-50');
-  for (const [t, n] of Object.entries(c.tiers.maxTurns)) if (!Number.isInteger(n) || n < 0 || n > 200) errors.push(`tiers.maxTurns.${t} must be 0-200`);
-  if (!strs(c.trust.feedbackAuthors) || !strs(c.trust.contextAssociations)) errors.push('trust lists must be string arrays');
-  if (!strs(c.checks.project)) errors.push('checks.project must be a string array');
-  if (!['model', 'deterministic'].includes(c.learning.distill)) errors.push('learning.distill must be model or deterministic');
-  for (const p of c.secrets.extraPatterns ?? []) {
-    try {
-      new RegExp(p);
-    } catch {
-      errors.push(`secrets.extraPatterns: invalid regex ${JSON.stringify(p)}`);
-    }
-  }
   return { config: c, errors };
+}
+
+// Trust lists may name "repository-owner" instead of a login, so no login is
+// committed; it resolves to the owner part of owner/name.
+export function resolveAuthors(list, repo) {
+  const owner = String(repo ?? '').split('/')[0].toLowerCase();
+  return [...new Set((list ?? []).map((a) => (a === 'repository-owner' ? owner : String(a).toLowerCase())).filter(Boolean))];
 }
 
 export const securityClasses = (config) => new Set(config.classes.filter((k) => k.security).map((k) => k.id));
@@ -115,7 +161,10 @@ function readJson(path, label, errors) {
 function checkRouting(routing, config, errors) {
   if (!Array.isArray(routing)) return errors.push('routing.json must be an array');
   const ids = classIds(config);
+  const seen = new Set();
   for (const e of routing) {
+    if (isObj(e) && seen.has(e.linkType)) errors.push(`routing: duplicate link type ${e.linkType}`);
+    if (isObj(e)) seen.add(e.linkType);
     if (!isObj(e) || typeof e.linkType !== 'string' || !strs(e.paths) || !strs(e.counterparts ?? []) || !Array.isArray(e.classes)) {
       errors.push(`routing entry malformed: ${JSON.stringify(e?.linkType)}`);
       continue;
@@ -124,7 +173,7 @@ function checkRouting(routing, config, errors) {
   }
 }
 
-// dir: the project's .claude/pr-review directory inside a base checkout.
+// dir: the project's .pr-review directory inside a base checkout.
 export function loadProject(dir) {
   const errors = [];
   const raw = readJson(join(dir, 'config.json'), 'config.json', errors);
@@ -143,6 +192,6 @@ export function setActiveProject(p) {
   active = p;
 }
 export function activeProject() {
-  if (!active) active = { dir: null, config: merge({}), routing: [], linkTypes: [], errors: ['no project loaded'] };
+  if (!active) active = { dir: null, config: normalizeConfig({}).config, routing: [], linkTypes: [], errors: ['no project loaded'] };
   return active;
 }

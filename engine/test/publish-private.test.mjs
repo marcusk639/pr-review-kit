@@ -11,50 +11,49 @@ const BASE = 'd'.repeat(40);
 const KEY = 'k';
 const SEC = { slug: 'c1:src/auth.ts:check', class: 1, severity: 'High', confidence: 'high', security: true, package: 'api', area: 'auth', title: 'Token check skipped on retry path', feature: 'login', locations: [{ file: 'src/auth.ts', line: 4, side: 'changed' }], why: 'the retry branch returns before verify()', fix: 'verify first' };
 const project = (raw) => ({ ...RP, config: normalizeConfig({ version: 1, project: 'p', classes: [{ id: 1, name: 'auth', security: true }, { id: 9, name: 'x' }], ...raw }).config, routing: [], linkTypes: [] });
-const PRIVATE = { visibility: 'private', securityChannel: 'repo-comments', privateReaders: ['marcus'] };
 
 afterEach(() => setActiveProject(RP));
 
 function api({ isPrivate = true, collaborators = [{ login: 'marcus' }], fail = null } = {}) {
-  const calls = [];
-  const request = async (method, path) => {
-    calls.push(`${method} ${path}`);
+  return async (method, path) => {
     if (fail && path.includes(fail)) throw Object.assign(new Error('x'), { status: 403 });
     if (path === '/repos/o/r') return { private: isPrivate };
     if (path.startsWith('/repos/o/r/collaborators')) return collaborators;
     if (path === '/repos/o/r/pulls/7') return { head: { sha: HEAD } };
     return null;
   };
-  return { request, calls };
 }
 
-test('verifyPrivateChannel: private repo whose collaborators are all readers', async () => {
-  assert.deepEqual(await verifyPrivateChannel('o/r', ['marcus'], api().request), { verified: true });
+test('verifyPrivateChannel: a private repo whose collaborators are all readers', async () => {
+  assert.deepEqual(await verifyPrivateChannel('o/r', ['marcus'], api()), { verified: true });
 });
 
-test('verifyPrivateChannel fails closed: public repo, unknown reader, API failure', async () => {
-  assert.equal((await verifyPrivateChannel('o/r', ['marcus'], api({ isPrivate: false }).request)).verified, false);
-  assert.equal((await verifyPrivateChannel('o/r', ['marcus'], api({ collaborators: [{ login: 'marcus' }, { login: 'guest' }] }).request)).verified, false);
-  assert.equal((await verifyPrivateChannel('o/r', ['marcus'], api({ fail: 'collaborators' }).request)).verified, false);
-  assert.equal((await verifyPrivateChannel('o/r', ['marcus'], api({ collaborators: [] }).request)).verified, false, 'an empty list is not evidence');
+test('verifyPrivateChannel fails closed: public repo, unknown reader, API failure, empty list', async () => {
+  assert.equal((await verifyPrivateChannel('o/r', ['marcus'], api({ isPrivate: false }))).verified, false);
+  assert.equal((await verifyPrivateChannel('o/r', ['marcus'], api({ collaborators: [{ login: 'marcus' }, { login: 'guest' }] }))).verified, false);
+  assert.equal((await verifyPrivateChannel('o/r', ['marcus'], api({ fail: 'collaborators' }))).verified, false);
+  assert.equal((await verifyPrivateChannel('o/r', ['marcus'], api({ collaborators: [] }))).verified, false);
 });
 
-async function run(raw, apiOpts) {
+async function run(raw, { issues = { delivered: true, resolvedIds: [] }, privateRepo = 'marcus/inbox', issueToken = 'tok' } = {}) {
   setActiveProject(project(raw));
-  const a = api(apiOpts);
   let summary = null;
-  let delivered = 0;
+  const calls = { advisories: 0, issues: [] };
   const deps = {
     listIssueComments: async () => [],
     upsertSummary: async (repo, pr, body) => {
       summary = body;
     },
     deliverAdvisories: async () => {
-      delivered++;
+      calls.advisories++;
       return { delivered: true, resolvedIds: [] };
     },
+    deliverIssues: async (args) => {
+      calls.issues.push(args);
+      return typeof issues === 'function' ? issues(args) : issues;
+    },
     listReviewComments: async () => [],
-    request: a.request,
+    request: api(),
     report: () => {},
   };
   const snapshot = { lastReviewedSha: null, lastBaseSha: null, ledger: [], linkTypesSeen: [], runLinkTypes: [], inlineSlugs: [], tier: 'full', maxTurns: 60, headSha: HEAD, baseSha: BASE, pr: 7, changedFiles: ['src/auth.ts'] };
@@ -62,35 +61,37 @@ async function run(raw, apiOpts) {
   const orig = console.log;
   console.log = () => {};
   try {
-    await publish({ repo: 'o/r', pr: 7, snapshot, findingsText, inlineText: '[]', narrative: 'Checked src/auth.ts retry path.', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY, runStartedAt: null }, deps);
+    await publish({ repo: 'o/r', pr: 7, snapshot, findingsText, inlineText: '[]', narrative: 'Checked src/auth.ts retry path.', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY, runStartedAt: null, privateRepo, issueToken }, deps);
   } finally {
     console.log = orig;
   }
-  return { summary, delivered };
+  return { summary, calls };
 }
 
-test('a verified private channel shows security findings in full, tagged, with a handle', async () => {
-  const { summary, delivered } = await run(PRIVATE);
-  assert.match(summary, /security-relevant: Token check skipped on retry path/);
-  assert.match(summary, /src\/auth\.ts:4/);
-  assert.ok(summary.includes(handleOf(SEC.slug)));
-  assert.match(summary, /Checked src\/auth\.ts retry path\./, 'narrative is not withheld');
-  assert.equal(delivered, 0, 'no advisory for a private repo');
+const PRIVATE = { visibility: 'private', securityChannel: 'private-repo-issue' };
+
+test('private-repo-issue: the public surface shows only the pointer; details go to the inbox', async () => {
+  const { summary, calls } = await run(PRIVATE);
+  assert.match(summary, /Security-relevant issue \(High\) in api auth; details sent privately/);
+  assert.doesNotMatch(summary, /Token check skipped|src\/auth\.ts/);
+  assert.ok(!summary.includes(handleOf(SEC.slug)));
+  assert.equal(calls.advisories, 0);
+  assert.equal(calls.issues.length, 1);
+  assert.deepEqual([calls.issues[0].target, calls.issues[0].token, calls.issues[0].readers], ['marcus/inbox', 'tok', ['o']]);
+  assert.equal(calls.issues[0].findings[0].slug, SEC.slug);
 });
 
-test('an unverified private channel shows only the pointer and says why', async () => {
-  const { summary, delivered } = await run(PRIVATE, { collaborators: [{ login: 'marcus' }, { login: 'guest' }] });
+test('private-repo-issue fails closed: undelivered details say so and stay private', async () => {
+  const { summary } = await run(PRIVATE, { issues: { delivered: false } });
+  assert.match(summary, /details could not be delivered privately/);
   assert.doesNotMatch(summary, /Token check skipped/);
-  assert.doesNotMatch(summary, /src\/auth\.ts/);
-  assert.match(summary, /Security-relevant issue \(High\) in api auth; details withheld: no verified private channel/);
-  assert.equal(delivered, 0);
 });
 
-test('channel none never shows detail and never tries an advisory', async () => {
-  const { summary, delivered } = await run({ visibility: 'private', securityChannel: 'none' });
-  assert.match(summary, /details withheld: no verified private channel/);
+test('channel none never shows detail and never tries a delivery', async () => {
+  const { summary, calls } = await run({ visibility: 'private', securityChannel: 'none' });
+  assert.match(summary, /details withheld: no private channel configured/);
   assert.doesNotMatch(summary, /Token check skipped/);
-  assert.equal(delivered, 0);
+  assert.equal(calls.advisories + calls.issues.length, 0);
 });
 
 test('an earlier security entry does not claim private delivery on a channel that has none', async () => {
@@ -101,12 +102,4 @@ test('an earlier security entry does not claim private delivery on a channel tha
   assert.match(body, /Security-relevant issue \(High\) reported earlier; details not shown here/);
   setActiveProject(RP);
   assert.match(renderSummary({ state: { tier: 'full' }, findings: null, narrative: '', outcome: 'failure', ledger }), /reported earlier; details sent privately/);
-});
-
-test('the advisory line only promises pointers when security detail is withheld', async () => {
-  const { summary } = await run(PRIVATE);
-  assert.doesNotMatch(summary, /Security-relevant findings show only a pointer here/);
-  assert.match(summary, /_Advisory only: not a required check\._/);
-  const withheld = await run(PRIVATE, { collaborators: [{ login: 'guest' }] });
-  assert.match(withheld.summary, /Security-relevant findings show only a pointer here/);
 });

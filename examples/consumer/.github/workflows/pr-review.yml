@@ -28,7 +28,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -41,12 +41,16 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
-      # Model-free; the only step with the id key and the advisory token.
-      # Private repos using securityChannel repo-comments or none omit both.
+      # Model-free; the only step with the id key and the private-channel token.
+      # Public repos (securityChannel advisory): advisory_token. Private repos
+      # (private-repo-issue): replace it with
+      #   private_repo: ${{ vars.PR_REVIEW_PRIVATE_REPO }}
+      #   private_issue_token: ${{ secrets.PR_REVIEW_ISSUE_TOKEN }}
       - name: Publish
         if: always()
         uses: marcusk639/pr-review-kit/actions/publish@KIT_SHA
         with:
+          trust_sha: ${{ steps.review.outputs.trust_sha }}
           action_outcome: ${{ steps.review.outputs.outcome }}
           execution_file: ${{ steps.review.outputs.execution_file }}
           id_key: ${{ secrets.PR_REVIEW_ID_KEY }}

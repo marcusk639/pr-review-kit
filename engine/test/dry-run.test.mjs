@@ -73,8 +73,8 @@ before(() => {
     writeFileSync(join(root, p), t);
   };
   g('init', '-q', '-b', 'main');
-  put('.claude/pr-review/config.json', JSON.stringify({ version: 1, project: 'demo', classes: [{ id: 9, name: 'silent failure' }, { id: 1, name: 'auth', security: true }] }));
-  put('.claude/pr-review/routing.json', JSON.stringify([{ linkType: 'api', paths: ['src/**'], counterparts: ['web/**'], classes: [9] }]));
+  put('.pr-review/config.json', JSON.stringify({ version: 1, project: 'demo', classes: [{ id: 9, name: 'silent failure' }, { id: 1, name: 'auth', security: true }] }));
+  put('.pr-review/routing.json', JSON.stringify([{ linkType: 'api', paths: ['src/**'], counterparts: ['web/**'], classes: [9] }]));
   put('src/a.ts', 'export const a = () => 1;\n');
   g('add', '-A');
   g('commit', '-qm', 'base');

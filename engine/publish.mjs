@@ -14,7 +14,6 @@ import { fitMarker, ledgerSlug, markResolved, mergeLedger, opaqueId, reportedBy,
 import { MAX_MARKER, renderSummary } from './lib/render.mjs';
 import { completedFindings, completion, failureReason, isPartial, outcomeLabel } from './lib/completion.mjs';
 import { DELIVERED, NOT_DELIVERED, NO_CHANNEL, NO_KEY, deliver } from './lib/deliver.mjs';
-import { verifyPrivateChannel } from './lib/private-channel.mjs';
 import { isObject, priorFromComment, priorPayload, resolvePrior, sha, strings } from './lib/prior.mjs';
 import { currentHead, fallbackSummary, postSummary, statusOf } from './lib/summary-post.mjs';
 import { stepSummary, warn } from './lib/status.mjs';
@@ -76,7 +75,7 @@ export const FROZEN_NOTICE = '> ledger frozen for security entries: id key unava
 // Without the key: no security or withheld entry can be created (or matched),
 // so existing ones are carried unchanged and the summary says so.
 function frozenNotice(idKey, ledger, findings, needles) {
-  if (idKey) return [];
+  if (idKey || activeProject().config.securityChannel === 'none') return [];
   const priorOpaque = ledger.some((e) => e.security || e.withheld);
   const current = (findings ?? []).some((f) => f.security || touchesSecurityFile(f, needles));
   return priorOpaque || current ? [FROZEN_NOTICE] : [];
@@ -155,19 +154,7 @@ function previousMarker(snapshot, fallback, rawMarker, idKey) {
 // not read the prior state and publish cannot either. Both cases warn; the
 // second also tries the minimal banner, which only ever replaces a summary it
 // found and keeps that summary's marker.
-// A private repo's own comments are its security channel only when publish
-// has just verified who can read them; otherwise security detail is withheld.
-async function checkChannel(repo, request) {
-  const project = activeProject();
-  project.privateVerified = false;
-  if (project.config.securityChannel !== 'repo-comments') return;
-  const v = await verifyPrivateChannel(repo, project.config.privateReaders, request);
-  project.privateVerified = v.verified;
-  if (!v.verified) warn(`private channel not verified (${v.reason}); security details withheld`);
-}
-
 async function publishRun({ repo, pr, snapshot: trusted, advisoryToken, ...rest }, deps) {
-  await checkChannel(repo, deps.request);
   const head = sha(rest.headSha);
   const check = await currentHead(repo, pr, deps.request);
   if (head && check.sha && check.sha !== head) {
@@ -196,7 +183,7 @@ async function publishRun({ repo, pr, snapshot: trusted, advisoryToken, ...rest 
   if (prior.skip || oversized) {
     // Checked before anything is posted. Advisories still go out: they are
     // private and do not depend on the summary.
-    const { clause } = await deliver(repo, pr, snapshot, { ...rest, advisoryToken }, deps.deliverAdvisories ?? deliverAdvisories);
+    const { clause } = await deliver(repo, pr, snapshot, { ...rest, advisoryToken, request: deps.request, deliverIssues: deps.deliverIssues }, deps.deliverAdvisories ?? deliverAdvisories);
     const why = oversized ? 'the old marker is too large to carry over' : 'prior review state unavailable';
     warn(`summary not updated: ${why}`);
     const minimal = await fallbackSummary(repo, pr, head ?? sha(snapshot?.headSha), deps, oversized ? 'marker too large' : 'prior state unavailable');
@@ -213,7 +200,7 @@ async function publishRun({ repo, pr, snapshot: trusted, advisoryToken, ...rest 
     warn(`${inline.notPosted} inline comment(s) not posted`);
     extra.push(`${inline.notPosted} inline comment(s) not posted`);
   }
-  const { clause, resolvedIds } = await deliver(repo, pr, snapshot, { ...rest, advisoryToken }, deps.deliverAdvisories ?? deliverAdvisories);
+  const { clause, resolvedIds } = await deliver(repo, pr, snapshot, { ...rest, advisoryToken, request: deps.request, deliverIssues: deps.deliverIssues }, deps.deliverAdvisories ?? deliverAdvisories);
   if (clause === NOT_DELIVERED) {
     warn('security advisories not delivered');
     extra.push('advisories not delivered');

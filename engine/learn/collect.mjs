@@ -8,7 +8,7 @@ import { findSummary } from '../lib/state.mjs';
 import { decodeLedger } from '../lib/markers.mjs';
 import { sanitizeLedger } from '../lib/ledger.mjs';
 import { route } from '../lib/routing.mjs';
-import { securityClasses } from '../lib/config.mjs';
+import { resolveAuthors, securityClasses } from '../lib/config.mjs';
 
 const BOT = 'github-actions[bot]';
 const DAY = 24 * 60 * 60 * 1000;
@@ -48,7 +48,7 @@ export function enrich(record, ledger, project) {
 export async function collect({ repo, project, now = new Date(), deps }) {
   const cutoff = now.getTime() - project.config.learning.windowDays * DAY;
   const pulls = (await deps.listPulls(repo)).filter((p) => Date.parse(p.updated_at) >= cutoff);
-  const trusted = project.config.trust.feedbackAuthors;
+  const trusted = resolveAuthors(project.config.trust.feedbackAuthors, repo);
   const records = [];
   const recordsByPr = {};
   for (const p of pulls) {

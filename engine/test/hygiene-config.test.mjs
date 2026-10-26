@@ -50,7 +50,7 @@ test('self-edit covers the configured review and learning workflows', () => {
   const [wf] = checkSelfEdit([file({ file: '.github/workflows/review.yml' })]);
   assert.match(wf.note, /takes effect in this run/);
   assert.equal(checkSelfEdit([file({ file: '.github/workflows/learn.yml' })]).length, 1);
-  assert.equal(checkSelfEdit([file({ file: '.claude/pr-review/learned/lessons.json' })]).length, 1);
+  assert.equal(checkSelfEdit([file({ file: '.pr-review/learned/lessons.json' })]).length, 1);
   assert.deepEqual(checkSelfEdit([file({ file: '.github/workflows/claude-code-review.yml' })]), []);
 });
 
@@ -70,4 +70,15 @@ test('engine pin: a changed kit SHA in the workflow is reported, an unchanged on
 test('extra secret patterns from the config are redacted', () => {
   use({ secrets: { extraPatterns: ['snow_[A-Za-z0-9]{12,}'] } });
   assert.equal(redact('k=snow_abcdefghijklmnop'), 'k=snow_a…');
+});
+
+test('new-file size never reads through a symlinked file or directory', async () => {
+  const { symlinkSync, mkdirSync } = await import('node:fs');
+  const root = mkdtempSync(join(tmpdir(), 'size-'));
+  const outside = mkdtempSync(join(tmpdir(), 'outside-'));
+  writeFileSync(join(outside, 'big.ts'), 'x\n'.repeat(400));
+  symlinkSync(join(outside, 'big.ts'), join(root, 'link.ts'));
+  symlinkSync(outside, join(root, 'dir'));
+  mkdirSync(join(root, 'real'));
+  assert.deepEqual(checkNewFileSize([file({ file: 'link.ts', status: 'A' }), file({ file: 'dir/big.ts', status: 'A' })], root), []);
 });

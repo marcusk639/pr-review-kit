@@ -34,11 +34,6 @@ test('forced security follows the configured security classes', () => {
   assert.equal(validateFindings(doc(finding(2))).value.findings[0].security, true);
 });
 
-test('a verified private channel withholds nothing by class', () => {
-  setActiveProject(project({ visibility: 'private', securityChannel: 'repo-comments', privateReaders: ['me'], classes: [{ id: 2, name: 'a', security: true }] }, { privateVerified: true }));
-  assert.equal(isForcedSecurity(2, 'c2:a.ts:x'), false);
-});
-
 test('inline slugs accept configured class ids beyond 14', () => {
   setActiveProject(project({ classes: [{ id: 21, name: 'x' }] }));
   const r = readInline(JSON.stringify([{ slug: 'c21:src/a.ts:fn', path: 'src/a.ts', line: 3, side: 'RIGHT', body: 'b' }]));

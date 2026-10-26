@@ -185,7 +185,7 @@ test('runPaths needs both OUT and STATE_FILE', () => {
 test('publish main without OUT/STATE_FILE fails closed: warns, posts nothing, exits 0', () => {
   const dir = mkdtempSync(join(tmpdir(), 'prr-'));
   const summary = join(dir, 'step.md');
-  cpSync(RP_DIR, join(dir, 'checkout/.claude/pr-review'), { recursive: true });
+  cpSync(RP_DIR, join(dir, 'checkout/.pr-review'), { recursive: true });
   // No network: every GitHub call fails, so the comment cannot be read either.
   const stub = 'data:text/javascript,globalThis.fetch=async()=>{throw new Error("offline")}';
   const out = execFileSync(process.execPath, ['--no-warnings', '--import', stub, PUBLISH], {

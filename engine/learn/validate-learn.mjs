@@ -3,6 +3,7 @@
 // and no model, and both pin the same kit SHA as the review workflow.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { checkWorkflow } from '../lib/workflow-check.mjs';
 
 // The text of each job, split at two-space-indented job ids under "jobs:".
 function jobsOf(yml) {
@@ -11,11 +12,14 @@ function jobsOf(yml) {
   return yml.slice(start).split(/\n(?= {2}[\w-]+:\s*$)/m).slice(1);
 }
 
-export function validateLearnWorkflow(root, project, { errors, checkPins }) {
+export function validateLearnWorkflow(root, project, { errors }) {
   const path = project.config.learnWorkflowPath;
   if (!path || !existsSync(join(root, path))) return;
-  const wf = readFileSync(join(root, path), 'utf8');
-  const sha = checkPins(wf, errors, ['learn', 'propose']);
+  const r = checkWorkflow(readFileSync(join(root, path), 'utf8'), { kind: 'learn' });
+  errors.push(...r.errors.map((e) => `learning workflow: ${e}`));
+  const wf = r.text;
+  const sha = r.kitSha;
+  for (const a of ['learn', 'propose']) if (!new RegExp(`pr-review-kit/actions/${a}@`).test(wf)) errors.push(`the learning workflow does not use pr-review-kit/actions/${a}`);
   const review = existsSync(join(root, project.config.workflowPath)) ? readFileSync(join(root, project.config.workflowPath), 'utf8') : '';
   const reviewSha = /pr-review-kit\/actions\/review@(\S+)/.exec(review)?.[1];
   if (sha && reviewSha && sha !== reviewSha) errors.push('the learning workflow must pin the same kit SHA as the review workflow');

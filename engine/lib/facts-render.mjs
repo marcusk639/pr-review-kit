@@ -59,6 +59,7 @@ function projectSection(project) {
     `Knowledge files: ${c.knowledge.join(', ')}`,
     `Large PR: more than ${c.largePr.files} files or ${c.largePr.lines} lines.`,
     `Inline comments: ${c.inline.severities.join(', ')} findings only; at most ${c.inline.max} per run.`,
+    ...(c.withheld.length ? [`Withheld paths (denied to you, stubbed in the diff): ${c.withheld.join(', ')}`] : []),
     ...(demoted.length ? [`Demoted classes (low precision; report only at high confidence, no inline comment): ${demoted.join(', ')}`] : []),
     '',
     'Bug classes:',

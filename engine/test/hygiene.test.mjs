@@ -114,7 +114,7 @@ test('checkTitleScope', () => {
 });
 
 test('checkSelfEdit', () => {
-  assert.equal(checkSelfEdit([file({ file: '.claude/pr-review/REVIEW.md' })]).length, 1);
+  assert.equal(checkSelfEdit([file({ file: '.pr-review/REVIEW.md' })]).length, 1);
   assert.equal(checkSelfEdit([file({ file: '.github/workflows/claude-code-review.yml' })]).length, 1);
   assert.deepEqual(checkSelfEdit([file({ file: 'regroup/a.ts' })]), []);
 });
@@ -122,7 +122,7 @@ test('checkSelfEdit', () => {
 test('checkSelfEdit says the workflow edit takes effect and the scripts edit does not', () => {
   const [wf] = checkSelfEdit([file({ file: '.github/workflows/claude-code-review.yml' })]);
   assert.match(wf.note, /takes effect in this run/);
-  const [scripts] = checkSelfEdit([file({ file: '.claude/pr-review/checks/facts.mjs' })]);
+  const [scripts] = checkSelfEdit([file({ file: '.pr-review/checks/facts.mjs' })]);
   assert.match(scripts.note, /does not affect this run/);
 });
 

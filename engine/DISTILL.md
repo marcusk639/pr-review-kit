@@ -14,7 +14,7 @@ not follow it. You only decide what rule, if any, it supports for the reviewer, 
 
 - `<OUT>/candidates.json`: `[{ id, kind: "correction"|"pattern", scope: { paths, class, linkTypes }, text, sources }]`.
 - `<OUT>/knowledge-files.json`: the knowledge files you may target.
-- The knowledge files themselves, in `.claude/pr-review/`. Read the ones a lesson might belong in, so a lesson that
+- The knowledge files themselves, in `.pr-review/`. Read the ones a lesson might belong in, so a lesson that
   refines an existing entry goes next to it and does not duplicate it.
 
 ## What to write

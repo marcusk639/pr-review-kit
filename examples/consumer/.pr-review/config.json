@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "project": "example",
+  "visibility": "public",
+  "securityChannel": "advisory",
+  "workflowPath": ".github/workflows/pr-review.yml",
+  "learnWorkflowPath": ".github/workflows/pr-review-learn.yml",
+  "packages": [
+    "src",
+    "web"
+  ],
+  "knowledge": [
+    "checklist.md",
+    "conventions.md",
+    "false-positives.md",
+    "contract-map.md",
+    "learned-lessons.md"
+  ],
+  "classes": [
+    {
+      "id": 1,
+      "name": "Caller-supplied ids trusted for authorisation",
+      "security": true
+    },
+    {
+      "id": 2,
+      "name": "API route or payload drift between server and client"
+    },
+    {
+      "id": 3,
+      "name": "Silent failure reported as success"
+    },
+    {
+      "id": 4,
+      "name": "Tests that cannot fail"
+    },
+    {
+      "id": 5,
+      "name": "Secrets, PII or config mistakes",
+      "security": true,
+      "light": true
+    },
+    {
+      "id": 6,
+      "name": "PR text that claims what the code does not do",
+      "always": true,
+      "light": true
+    }
+  ],
+  "checks": {
+    "piiLogs": {
+      "fields": "email|phone|address|password|token",
+      "logCall": "\\b(?:logger|console)\\."
+    },
+    "newFileSize": false,
+    "project": [
+      "checks/routes.mjs"
+    ]
+  },
+  "trust": {
+    "feedbackAuthors": [
+      "repository-owner"
+    ]
+  },
+  "learning": {
+    "distill": "model"
+  }
+}

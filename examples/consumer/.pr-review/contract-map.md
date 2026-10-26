@@ -17,7 +17,7 @@ entry and appears in exactly one knowledge file. The map is guidance: confirm ev
 
 ## review-config
 
-- `.claude/pr-review/**` and `.github/workflows/pr-review*.yml` ↔ the reviewer itself (self-edit).
+- `.pr-review/**` and `.github/workflows/pr-review*.yml` ↔ the reviewer itself (self-edit).
 
 <!-- pr-review:learned:begin -->
 <!-- pr-review:learned:end -->

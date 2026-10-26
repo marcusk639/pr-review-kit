@@ -53,8 +53,8 @@ test('light files come from the config', () => {
   assert.notEqual(classify({ ...base, incrementFiles: ['README.md'] }, c), 'light');
 });
 
-test('tiers disabled: every run with changes is full', () => {
-  const c = cfg({ tiers: { enabled: false } });
+test('tier set "full": every run with changes is full', () => {
+  const c = cfg({ tiers: { set: 'full' } });
   assert.equal(classify({ ...base, incrementFiles: ['README.md'] }, c), 'full');
   assert.equal(classify({ ...base, incrementLinkTypes: ['callable'], linkTypesSeen: ['callable'] }, c), 'full');
   assert.equal(classify({ ...base, incrementFiles: [] }, c), 'none');
@@ -72,4 +72,27 @@ test('prFileCount 0 with a code increment gives incremental-new-links', () => {
   const { prFileCount, ...noCount } = base;
   assert.equal(classify({ ...noCount, incrementLinkTypes: ['callable'], linkTypesSeen: ['callable'] }), 'incremental-new-links');
   assert.equal(classify({ ...base, prFileCount: 0, incrementFiles: ['README.md'] }), 'light');
+});
+
+test('tier set "none-light-full": light when only light files changed and no link type, full otherwise', () => {
+  const c = cfg({ tiers: { set: 'none-light-full' } });
+  assert.equal(classify({ ...base, incrementFiles: ['README.md'] }, c), 'light');
+  assert.equal(classify({ ...base, incrementLinkTypes: ['callable'], linkTypesSeen: ['callable'] }, c), 'full');
+  assert.equal(classify({ ...base, incrementFiles: ['README.md'], incrementLinkTypes: ['callable'] }, c), 'full');
+  assert.equal(classify({ ...base, incrementFiles: [] }, c), 'none');
+  assert.equal(classify({ ...base, prDiffUnchanged: true, baseDriftCounterpartsChanged: true }, c), 'none');
+});
+
+test('a disabled tier falls back to the next wider one', () => {
+  assert.equal(classify({ ...base, prDiffUnchanged: true, baseDriftCounterpartsChanged: true }, cfg({ tiers: { disabled: ['base-drift'] } })), 'none');
+  assert.equal(classify({ ...base, incrementFiles: ['README.md'] }, cfg({ tiers: { disabled: ['light'] } })), 'incremental');
+  assert.equal(classify({ ...base, incrementLinkTypes: ['callable'], linkTypesSeen: ['callable'] }, cfg({ tiers: { disabled: ['incremental'] } })), 'incremental-new-links');
+  assert.equal(classify({ ...base, incrementLinkTypes: ['callable'], linkTypesSeen: ['storage'] }, cfg({ tiers: { disabled: ['incremental-new-links'] } })), 'full');
+});
+
+test('lightExclude keeps behavioural docs out of the light tier', () => {
+  const c = cfg({ lightExclude: ['prompts/**', '**/SKILL.md', 'CLAUDE.md'] });
+  assert.notEqual(classify({ ...base, incrementFiles: ['prompts/system.md'] }, c), 'light');
+  assert.notEqual(classify({ ...base, incrementFiles: ['CLAUDE.md'] }, c), 'light');
+  assert.equal(classify({ ...base, incrementFiles: ['docs/a.md'] }, c), 'light');
 });

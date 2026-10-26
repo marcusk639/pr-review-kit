@@ -2,5 +2,5 @@
   { "linkType": "api-route", "paths": ["src/**"], "counterparts": ["web/**"], "classes": [1, 2, 3] },
   { "linkType": "client", "paths": ["web/**"], "counterparts": ["src/**"], "classes": [2] },
   { "linkType": "tests", "paths": ["**/*.test.ts"], "counterparts": [], "classes": [4] },
-  { "linkType": "review-config", "paths": [".claude/pr-review/**", ".github/workflows/pr-review*.yml"], "counterparts": [], "classes": [5] }
+  { "linkType": "review-config", "paths": [".pr-review/**", ".github/workflows/pr-review*.yml"], "counterparts": [], "classes": [5] }
 ]

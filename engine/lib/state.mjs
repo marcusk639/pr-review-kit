@@ -1,5 +1,5 @@
 import { BOT_AUTHOR, SUMMARY_MARKER, decodeLedger, extractInlineSlugs, rawLedgerMarker } from './markers.mjs';
-import { activeProject } from './config.mjs';
+import { activeProject, resolveAuthors } from './config.mjs';
 import { feedbackRecords, prFeedback } from './feedback.mjs';
 
 // Both the summary and the inline comments are posted by publish.
@@ -86,7 +86,7 @@ export async function loadState(repo, pr, { listIssueComments, listReviewComment
     state.acknowledgedSlugs = acknowledgedSlugs(reviews);
     // Trusted feedback on earlier findings: 👎 means "do not re-raise", text is a correction.
     const reactions = await reactionsFor(repo, reviews, listReactions);
-    const trusted = activeProject().config.trust.feedbackAuthors;
+    const trusted = resolveAuthors(activeProject().config.trust.feedbackAuthors, repo);
     state.feedback = prFeedback(feedbackRecords({ pr, reviewComments: reviews, issueComments: comments, reactions, ledger: state.ledger, trusted }));
   } catch {
     // keep defaults

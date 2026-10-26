@@ -14,7 +14,8 @@ test('normalizeConfig fills the reference defaults', () => {
   assert.equal(config.securityChannel, 'advisory');
   assert.equal(config.inline.max, 10);
   assert.deepEqual(config.inline.severities, ['Critical', 'High']);
-  assert.equal(config.tiers.enabled, true);
+  assert.equal(config.tiers.set, 'all');
+  assert.deepEqual(config.tiers.disabled, []);
   assert.deepEqual(config.tiers.maxTurns, { none: 0, 'base-drift': 15, light: 15, incremental: 40, 'incremental-new-links': 60, full: 60 });
   assert.equal(config.tiers.largeShare, 0.5);
   assert.equal(config.checks.newFileSize.maxLines, 300);
@@ -22,7 +23,7 @@ test('normalizeConfig fills the reference defaults', () => {
   assert.equal(config.checks.titleScope, false);
   assert.equal(config.checks.verifyDiff, false);
   assert.deepEqual(config.trust.contextAssociations, ['OWNER', 'MEMBER', 'COLLABORATOR']);
-  assert.deepEqual(config.trust.feedbackAuthors, []);
+  assert.deepEqual(config.trust.feedbackAuthors, ['repository-owner']);
   assert.equal(config.workflowPath, '.github/workflows/pr-review.yml');
   assert.equal(config.learning.distill, 'model');
 });
@@ -36,19 +37,18 @@ test('normalizeConfig merges a partial maxTurns over the defaults', () => {
 test('normalizeConfig rejects unknown keys, bad visibility and bad channels', () => {
   assert.match(normalizeConfig({ ...minimal, bogus: 1 }).errors.join(), /unknown key: bogus/);
   assert.match(normalizeConfig({ ...minimal, visibility: 'internal' }).errors.join(), /visibility/);
-  assert.match(normalizeConfig({ ...minimal, securityChannel: 'repo-comments' }).errors.join(), /repo-comments.*private/);
+  assert.match(normalizeConfig({ ...minimal, securityChannel: 'repo-comments' }).errors.join(), /securityChannel/);
   assert.match(normalizeConfig({ ...minimal, visibility: 'private', securityChannel: 'advisory' }).errors.join(), /advisory.*public/);
-  assert.match(normalizeConfig({ ...minimal, visibility: 'private', securityChannel: 'repo-comments' }).errors.join(), /privateReaders/);
-  assert.deepEqual(normalizeConfig({ ...minimal, visibility: 'private', securityChannel: 'repo-comments', privateReaders: ['me'] }).errors, []);
+  assert.deepEqual(normalizeConfig({ ...minimal, visibility: 'private', securityChannel: 'none' }).errors, []);
 });
 
-test('a private repo defaults to the none channel', () => {
-  assert.equal(normalizeConfig({ ...minimal, visibility: 'private' }).config.securityChannel, 'none');
+test('a private repo defaults to the private-repo-issue channel', () => {
+  assert.equal(normalizeConfig({ ...minimal, visibility: 'private' }).config.securityChannel, 'private-repo-issue');
 });
 
 test('normalizeConfig validates classes', () => {
   assert.match(normalizeConfig({ ...minimal, classes: [] }).errors.join(), /classes/);
-  assert.match(normalizeConfig({ ...minimal, classes: [{ id: 0, name: 'x' }] }).errors.join(), /class id/);
+  assert.match(normalizeConfig({ ...minimal, classes: [{ id: 0, name: 'x' }] }).errors.join(), /classes\[0\]\.id/);
   assert.match(normalizeConfig({ ...minimal, classes: [{ id: 2, name: 'a' }, { id: 2, name: 'b' }] }).errors.join(), /duplicate class/);
   assert.match(normalizeConfig({ version: 2, project: 'x', classes: minimal.classes }).errors.join(), /version/);
   assert.match(normalizeConfig({ ...minimal, project: 'has space' }).errors.join(), /project/);
@@ -58,11 +58,6 @@ test('security classes and class ids come from the config', () => {
   const { config } = normalizeConfig({ ...minimal, classes: [{ id: 3, name: 'a', security: true }, { id: 9, name: 'b' }] });
   assert.deepEqual([...securityClasses(config)], [3]);
   assert.deepEqual([...classIds(config)], [3, 9]);
-});
-
-test('a private repo-comments channel keeps the configured security classes', () => {
-  const { config } = normalizeConfig({ ...minimal, visibility: 'private', securityChannel: 'repo-comments', privateReaders: ['me'], classes: [{ id: 3, name: 'a', security: true }] });
-  assert.deepEqual([...securityClasses(config)], [3]);
 });
 
 test('loadProject reads config.json and routing.json and checks routing classes', () => {
@@ -88,4 +83,32 @@ test('the recovery-platform fixture loads cleanly', () => {
   const p = loadProject(new URL('./fixtures/rp/', import.meta.url).pathname);
   assert.deepEqual(p.errors, []);
   assert.deepEqual([...securityClasses(p.config)], [1, 4, 7, 11, 14]);
+});
+
+test('malformed nested values are errors, never a throw', () => {
+  for (const bad of [{ trust: null }, { inline: 'x' }, { tiers: 5 }, { learning: [] }, { secrets: { extraPatterns: 'x' } }, { checks: { verifyDiff: true } }, { checks: null }, { largePr: { files: -1 } }, { learning: { branch: '' } }, { learning: { windowDays: 'a' } }, { tiers: { maxTurns: null } }]) {
+    let r;
+    assert.doesNotThrow(() => {
+      r = normalizeConfig({ ...minimal, ...bad });
+    }, JSON.stringify(bad));
+    assert.ok(r.errors.length > 0, `no error for ${JSON.stringify(bad)}`);
+  }
+});
+
+test('a null or array config is an error', () => {
+  assert.match(normalizeConfig(null).errors.join(), /JSON object/);
+  assert.match(normalizeConfig([]).errors.join(), /JSON object/);
+});
+
+test('unknown nested keys are rejected', () => {
+  assert.match(normalizeConfig({ ...minimal, inline: { max: 3, bogus: 1 } }).errors.join(), /unknown key: inline\.bogus/);
+  assert.match(normalizeConfig({ ...minimal, checks: { piiLogs: { fields: 'x', nope: 1 } } }).errors.join(), /unknown key: checks\.piiLogs\.nope/);
+});
+
+test('invalid regexes in checks are errors', () => {
+  assert.match(normalizeConfig({ ...minimal, checks: { piiLogs: { fields: '(', logCall: 'x' } } }).errors.join(), /checks\.piiLogs\.fields/);
+});
+
+test('the learning branch cannot be a default-branch name', () => {
+  assert.match(normalizeConfig({ ...minimal, learning: { branch: 'main' } }).errors.join(), /learning\.branch/);
 });

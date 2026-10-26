@@ -41,7 +41,7 @@ function renderFinding(f, needles, isNew, clause) {
   if (touchesSecurityFile(f, needles)) return `- **${WITHHELD_TITLE}** (confidence: ${f.confidence})${fresh}`;
   const again = f.reraise ? ` (re-raised after 👎: ${clean(f.reraise, 300)})` : '';
   return [
-    `- **${f.securityLabel ? 'security-relevant: ' : ''}${clean(f.title, 200)}** (confidence: ${f.confidence})${fresh}${f.inlinePosted ? ' (inline comment posted)' : ''}${again} · \`${handleOf(f.slug)}\``,
+    `- **${clean(f.title, 200)}** (confidence: ${f.confidence})${fresh}${f.inlinePosted ? ' (inline comment posted)' : ''}${again} · \`${handleOf(f.slug)}\``,
     `  - Where: ${f.locations.map(where).join('; ')}`,
     `  - Why: ${clean(f.why)}`,
     `  - Fix: ${clean(f.fix)}`,
@@ -50,7 +50,7 @@ function renderFinding(f, needles, isNew, clause) {
 }
 
 function renderPriorEntry(e) {
-  if (e.security) return `- Security-relevant issue (${e.severity}) reported earlier; ${activeProject().config.securityChannel === 'advisory' ? 'details sent privately' : 'details not shown here'}`;
+  if (e.security) return `- Security-relevant issue (${e.severity}) reported earlier; ${activeProject().config.securityChannel === 'none' ? 'details not shown here' : 'details sent privately'}`;
   if (e.withheld) return `- **${WITHHELD_TITLE}** (${e.severity}, from an earlier review)`;
   return `- **${clean(e.title || e.slug, 200)}** (${e.severity}, from an earlier review) · \`${handleOf(e.slug)}\``;
 }
@@ -181,7 +181,7 @@ function assemble(head, groups, narrative, markerText, sections = []) {
   return `${text}\n\n${markerText}`;
 }
 
-const advisory = () => (activeProject().privateVerified ? '_Advisory only: not a required check._' : '_Advisory only: not a required check. Security-relevant findings show only a pointer here._');
+const advisory = () => '_Advisory only: not a required check. Security-relevant findings show only a pointer here._';
 const FEEDBACK = '_Feedback: React 👍/👎 on an inline comment, or reply `F-…` 👍/👎 with a reason in a PR comment (e.g. `F-1a2b3c 👎 intentional: …`). Only maintainers\' feedback counts._';
 
 // Failure keeps the last completed review's open findings; tier "none" (no

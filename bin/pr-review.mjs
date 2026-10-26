@@ -4,13 +4,13 @@
 //         [--inline i.json] [--show-private] [--assume-private-verified]
 //     Facts against the local repo (offline: no GitHub, no prior state), with
 //     the project read from the base commit (or --project, a working copy of
-//     .claude/pr-review), then publish in dry-run mode.
+//     .pr-review), then publish in dry-run mode.
 //   learn --repo <owner/name>
 //     The learning job without the model or the PR: collects trusted feedback
 //     from GitHub (read-only; needs GH_TOKEN), applies it and prints the
 //     learning PR body. Writes nothing to the repo or GitHub.
 //   validate [--workflow <path>]
-//     Checks .claude/pr-review/ and the review workflow (see engine/validate.mjs).
+//     Checks .pr-review/ and the review workflow (see engine/validate.mjs).
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -34,10 +34,10 @@ function args(argv) {
 
 const git = (a, cwd) => execFileSync('git', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
-// The base commit's .claude and .github, as the workflow's base checkout would have them.
+// The base commit's .pr-review, .claude and .github, as the base checkout would have them.
 function baseCheckout(base, cwd, dir) {
   mkdirSync(dir, { recursive: true });
-  for (const path of ['.claude', '.github']) {
+  for (const path of ['.pr-review', '.claude', '.github']) {
     try {
       const tar = execFileSync('git', ['archive', '--format=tar', base, path], { cwd, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024 });
       execFileSync('tar', ['-x', '-C', dir], { input: tar });
@@ -57,7 +57,7 @@ async function local(o) {
   baseCheckout(base, cwd, baseDir);
   if (o.project) {
     // A working copy of the project (drafting knowledge before it is committed).
-    const dest = join(baseDir, '.claude/pr-review');
+    const dest = join(baseDir, '.pr-review');
     rmSync(dest, { recursive: true, force: true });
     cpSync(o.project, dest, { recursive: true });
   }

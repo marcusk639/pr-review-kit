@@ -1,10 +1,15 @@
 name: pr-review-kit publish
 description: >-
   Model-free publish: inline comments, the private security channel and the
-  one summary comment. Runs this action's pinned engine with the project config
-  from a fresh base checkout. The only step that sees the id key and the
-  advisory token. Use with if: always() after the review action.
+  one summary comment. Runs this action's pinned engine with the project
+  config from a fresh checkout of the review's trust SHA. The only step that
+  sees the id key and the private-channel tokens. Use with if: always() after
+  the review action.
 inputs:
+  trust_sha:
+    description: The review action's trust_sha output (falls back to the PR base SHA).
+    required: false
+    default: 
   action_outcome:
     description: The review action's outcome output.
     required: false
@@ -18,7 +23,15 @@ inputs:
     required: false
     default: ""
   advisory_token:
-    description: Fine-grained PAT with "Repository security advisories - read and write" on this repo. Public repos.
+    description: securityChannel advisory (public repos). Fine-grained PAT, "Repository security advisories - read and write" on this repo only.
+    required: false
+    default: ""
+  private_repo:
+    description: securityChannel private-repo-issue. The Marcus-only inbox repo, owner/name, from a repository variable (never committed).
+    required: false
+    default: ""
+  private_issue_token:
+    description: securityChannel private-repo-issue. Fine-grained PAT with Issues read/write on the inbox repo only.
     required: false
     default: ""
   dry_run:
@@ -34,10 +47,10 @@ runs:
       shell: bash
       run: rm -rf .review-publish
 
-    - name: Checkout base (project config, untouched by the model)
-      uses: actions/checkout@v4
+    - name: Checkout trust SHA (project config, untouched by the model)
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       with:
-        ref: ${{ github.event.pull_request.base.sha }}
+        ref: ${{ inputs.trust_sha || github.event.pull_request.base.sha }}
         path: .review-publish
         fetch-depth: 1
         persist-credentials: false
@@ -49,15 +62,17 @@ runs:
         REPO: ${{ github.repository }}
         PR: ${{ github.event.pull_request.number }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        BASE_SHA: ${{ inputs.trust_sha || github.event.pull_request.base.sha }}
         ACTION_OUTCOME: ${{ inputs.action_outcome }}
         EXECUTION_FILE: ${{ inputs.execution_file }}
         PR_REVIEW_PUBLISH: .review-publish
         PR_REVIEW_DRY_RUN: ${{ inputs.dry_run == 'true' && '1' || '' }}
         # Publish only: keys the ledger's opaque ids. Never given to facts or the model.
         PR_REVIEW_ID_KEY: ${{ inputs.id_key }}
-        # Publish only: draft advisories. Never given to the model or comments.
+        # Publish only: the private channel. Never given to the model or comments.
         ADVISORY_TOKEN: ${{ inputs.advisory_token }}
+        PR_REVIEW_PRIVATE_REPO: ${{ inputs.private_repo }}
+        PRIVATE_ISSUE_TOKEN: ${{ inputs.private_issue_token }}
         # Step env overrides GITHUB_ENV: nothing an earlier step exported can
         # preload code into this secret-bearing node process (NODE_OPTIONS)
         # or into the bash shell that launches it (BASH_ENV).

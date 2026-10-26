@@ -13,6 +13,7 @@ import { securitySlugsOf, unsafeInline } from './inline-guard.mjs';
 import { securityNeedles, touchesSecurityFile } from './needles.mjs';
 import { SLUG_RE } from './findings.mjs';
 import { activeProject } from './config.mjs';
+import { isWithheld } from './withheld.mjs';
 
 // Defaults; the project's config.inline overrides both.
 export const MAX_INLINE = 10;
@@ -93,6 +94,7 @@ export function selectInline({ entries, findings, changedFiles, postedSlugs, isS
     if (!f) drops.notFinding++;
     else if (!inlineEligible(f, needles)) drops.ineligible++;
     else if (seen.has(e.slug)) drops.duplicate++;
+    else if (isWithheld(e.path)) drops.ineligible++;
     else if (!files.has(e.path)) {
       drops.path++;
       drops.lost.push(e.slug);

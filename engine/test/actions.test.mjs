@@ -8,6 +8,8 @@ import { readFileSync } from 'node:fs';
 const read = (p) => readFileSync(new URL(`../../actions/${p}`, import.meta.url), 'utf8');
 const review = read('review/action.yml');
 const publish = read('publish/action.yml');
+const learn = read('learn/action.yml');
+const proposeAction = read('propose/action.yml');
 const stepOf = (yml, name) => {
   const start = yml.indexOf(`- name: ${name}`);
   assert.ok(start > 0, `step ${name}`);
@@ -15,7 +17,7 @@ const stepOf = (yml, name) => {
   return yml.slice(start, next === -1 ? undefined : next);
 };
 const allow = (/--allowedTools "([^"]+)"/.exec(review)?.[1] ?? '').split(',');
-const deny = (/--disallowedTools "([^"]+)"/.exec(review)?.[1] ?? '').split(',');
+const deny = (/--disallowedTools "([^"]+)"/.exec(review)?.[1] ?? '').replace('${{ steps.facts.outputs.extra_deny }}', '').split(',');
 
 test('Run start sets OUT, STATE_FILE and RUN_STARTED_AT through GITHUB_ENV before facts and the model', () => {
   const step = stepOf(review, 'Run start');
@@ -28,23 +30,54 @@ test('Run start sets OUT, STATE_FILE and RUN_STARTED_AT through GITHUB_ENV befor
 
 test('the base checkout path is cleared before the base checkout, which persists no credentials', () => {
   assert.match(stepOf(review, 'Clear base checkout path'), /run: rm -rf \.review-base\n/);
-  assert.ok(review.indexOf('Clear base checkout path') < review.indexOf('Checkout base'));
+  assert.ok(review.indexOf('Clear base checkout path') < review.indexOf('Checkout trust SHA'));
   for (const yml of [review, publish]) {
-    for (const m of yml.matchAll(/uses: actions\/checkout@v4\n(\s+with:\n(?:\s{8}.*\n)+)/g)) assert.match(m[1], /persist-credentials: false/);
+    const checkouts = [...yml.matchAll(/uses: actions\/checkout@[0-9a-f]{40}.*\n(\s+with:\n(?:\s{8}.*\n)+)/g)];
+    assert.ok(checkouts.length > 0);
+    for (const m of checkouts) assert.match(m[1], /persist-credentials: false/);
   }
 });
 
 test('the model runs only when facts chose a tier, and never fails the action', () => {
-  assert.match(review, /- name: Review\n\s+id: review\n\s+if: steps\.facts\.outputs\.tier != 'none'\n\s+continue-on-error: true/);
+  assert.match(review, /- name: Review\n\s+id: review\n\s+if: steps\.facts\.outputs\.tier != '' && steps\.facts\.outputs\.tier != 'none'\n\s+continue-on-error: true/);
 });
 
-test('the model runs with --strict-mcp-config and all hooks disabled', () => {
-  assert.match(review, /\n\s+--strict-mcp-config\n/);
-  assert.match(review, /settings: '\{"disableAllHooks": true\}'/);
+test('the model loads no project settings, no MCP servers and no hooks', () => {
+  for (const yml of [review, learn]) {
+    assert.match(yml, /\n\s+--setting-sources user\n/);
+    assert.match(yml, /\n\s+--strict-mcp-config\n/);
+    assert.match(yml, /settings: '\{"disableAllHooks": true, "claudeMdExcludes": \["\*\*\/CLAUDE\.md", "\*\*\/CLAUDE\.local\.md", "\*\*\/AGENTS\.md"\]\}'/);
+  }
+});
+
+test('every action dependency is pinned to a full commit SHA and none is local', () => {
+  for (const yml of [review, publish, learn, proposeAction]) {
+    for (const m of yml.matchAll(/uses:\s*(\S+)/g)) {
+      assert.match(m[1], /^[\w.-]+\/[\w.-]+(\/[\w./-]+)?@[0-9a-f]{40}$/, m[1]);
+      assert.ok(!m[1].startsWith('./'));
+    }
+  }
+});
+
+test('the PR head is neutralized after the knowledge restore and before externals and the model', () => {
+  const order = ['- name: Facts', '- name: Restore reviewer knowledge from the trust SHA', '- name: Neutralize PR head', '- name: External counterparts', '- name: Review'].map((n) => review.indexOf(n));
+  assert.ok(order.every((x) => x > 0));
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
+  assert.match(stepOf(review, 'Restore reviewer knowledge from the trust SHA'), /rm -rf \.claude-pr \.pr-review\n/);
+});
+
+test('one trust SHA: resolved at run start, used for the knowledge checkout and handed to publish', () => {
+  assert.match(stepOf(review, 'Run start'), /TRUST_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(stepOf(review, 'Checkout trust SHA'), /ref: \$\{\{ steps\.paths\.outputs\.trust_sha \}\}/);
+  assert.match(stepOf(review, 'Facts'), /BASE_SHA: \$\{\{ steps\.paths\.outputs\.trust_sha \}\}/);
+  assert.match(review, /trust_sha:\n\s+description: .*\n\s+value: \$\{\{ steps\.paths\.outputs\.trust_sha \}\}/);
+  assert.match(stepOf(publish, 'Checkout trust SHA'), /ref: \$\{\{ inputs\.trust_sha \|\| github\.event\.pull_request\.base\.sha \}\}/);
 });
 
 test('model writes and edits are allowed only under OUT; workspace and kit writes denied', () => {
   assert.deepEqual(allow, ['Read', 'Grep', 'Glob', 'Write(/${{ runner.temp }}/pr-review/**)', 'Edit(/${{ runner.temp }}/pr-review/**)']);
+  for (const t of ['Skill', 'Task', 'Agent', 'mcp__github', 'Read(./.claude-pr/**)', 'Read(/${{ github.workspace }}/.claude-pr/**)']) assert.ok(deny.includes(t), t);
+  assert.match(review, /Edit\(\/\$\{\{ runner\.temp \}\}\/prstate-snapshot\/\*\*\)\$\{\{ steps\.facts\.outputs\.extra_deny \}\}"/, 'withheld denies are appended');
   assert.ok(!deny.includes('Edit'), 'no bare Edit deny (it would override the OUT allow rule)');
   for (const t of ['Write', 'Edit']) {
     assert.ok(deny.includes(`${t}(/\${{ github.workspace }}/**)`), `${t} workspace`);
@@ -69,7 +102,7 @@ test('the OAuth token reaches only the claude-code-action step', () => {
 
 test('publish secrets appear only in the Publish step env, with NODE_OPTIONS and BASH_ENV cleared', () => {
   const step = stepOf(publish, 'Publish');
-  for (const s of ['inputs.id_key', 'inputs.advisory_token']) {
+  for (const s of ['inputs.id_key', 'inputs.advisory_token', 'inputs.private_repo', 'inputs.private_issue_token']) {
     assert.equal((publish.match(new RegExp(s.replace('.', '\\.'), 'g')) ?? []).length, 1, s);
     assert.ok(step.includes(s), `${s} in Publish`);
   }
@@ -81,7 +114,7 @@ test('publish secrets appear only in the Publish step env, with NODE_OPTIONS and
 
 test('publish clears its checkout path first and cleans OUT and the snapshot always', () => {
   assert.match(stepOf(publish, 'Clear publish checkout path'), /run: rm -rf \.review-publish\n/);
-  assert.ok(publish.indexOf('Clear publish checkout path') < publish.indexOf('Checkout base'));
+  assert.ok(publish.indexOf('Clear publish checkout path') < publish.indexOf('Checkout trust SHA'));
   assert.match(stepOf(publish, 'Cleanup'), /if: always\(\)/);
 });
 
@@ -90,16 +123,12 @@ test('every engine path is the pinned action path, never the workspace', () => {
   assert.match(stepOf(review, 'Run start'), /kit_root=\$\(cd "\$\{\{ github\.action_path \}\}\/\.\.\/\.\." && pwd\)/);
 });
 
-const learn = read('learn/action.yml');
-const proposeAction = read('propose/action.yml');
 
 test('the distill model has the review sandbox and cannot write the snapshot apply trusts', () => {
   const lallow = (/--allowedTools "([^"]+)"/.exec(learn)?.[1] ?? '').split(',');
   const ldeny = (/--disallowedTools "([^"]+)"/.exec(learn)?.[1] ?? '').split(',');
   assert.deepEqual(lallow, ['Read', 'Grep', 'Glob', 'Write(/${{ runner.temp }}/pr-review-learn/**)', 'Edit(/${{ runner.temp }}/pr-review-learn/**)']);
   for (const t of ['Bash', 'WebFetch', 'WebSearch', 'Read(//proc/**)', 'Read(/${{ github.workspace }}/.git/**)', 'Write(/${{ runner.temp }}/learn-snapshot/**)', 'Edit(/${{ runner.temp }}/learn-snapshot/**)', 'Write(/${{ github.workspace }}/**)']) assert.ok(ldeny.includes(t), t);
-  assert.match(learn, /\n\s+--strict-mcp-config\n/);
-  assert.match(learn, /settings: '\{"disableAllHooks": true\}'/);
   assert.match(stepOf(learn, 'Distill'), /continue-on-error: true/);
   assert.ok(learn.indexOf('- name: Distill') < learn.indexOf('- name: Apply'));
 });
