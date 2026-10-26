@@ -130,6 +130,9 @@ best-fitting class with slug `c<class>:<file>:self-edit`, and say which kind of 
   version from `<OUT>/pr.diff`;
 - the learning workflow: takes effect when it next runs from the default branch.
 
+A `learning-pr` fact instead means a learning PR whose bot commits touch only learned memory: review each lesson
+(is it scoped, accurate, non-revealing, and does it narrow coverage?), not the PR as a self-edit.
+
 ## Security-relevant findings
 
 A finding is security-relevant if its class is marked `security` in `## Project`, if it involves auth, secrets,

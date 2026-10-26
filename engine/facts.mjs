@@ -65,7 +65,7 @@ function runChecks({ files, repoRoot, baseSha, headSha, title, baseDir, projectC
     ['checkPiiLogs', () => checkPiiLogs(files)],
     ['checkNewFileSize', () => checkNewFileSize(files, repoRoot)],
     ['checkTitleScope', () => checkTitleScope(title)],
-    ['checkSelfEdit', () => checkSelfEdit(files)],
+    ['checkSelfEdit', () => checkSelfEdit(files, { baseSha, headSha, repoRoot })],
     ['checkEnginePin', () => checkEnginePin({ base: readOr(join(baseDir, config.workflowPath)), head: readAt(headSha, config.workflowPath, repoRoot) })],
     ['runVerifyDiff', () => runVerifyDiff(baseSha, repoRoot, verify, headSha)],
   ];

@@ -3,7 +3,8 @@ import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { redact, secretPatterns } from './lib/redact.mjs';
 import { git } from './lib/diff.mjs';
-import { activeProject } from './lib/config.mjs';
+import { PROJECT_SUBDIR, activeProject } from './lib/config.mjs';
+import { learningPrOnly } from './lib/learning-pr.mjs';
 
 // Every check reads its settings from the project's config.checks; a check set
 // to false returns no facts.
@@ -83,14 +84,17 @@ export function checkTitleScope(title) {
   return [];
 }
 
-export function checkSelfEdit(files) {
+// ctx (optional): { baseSha, headSha, repoRoot }. A pure learning PR (bot
+// commits confined to learned memory) gets one learning-pr fact instead.
+export function checkSelfEdit(files, ctx = {}) {
   if (!checks().selfEdit) return [];
   const { workflowPath, learnWorkflowPath } = activeProject().config;
   const kind = (p) => (p === workflowPath ? 'workflow' : p === learnWorkflowPath ? 'learn' : REVIEW_DIR.test(p ?? '') ? 'scripts' : null);
-  return files
-    .map((f) => [f, kind(f.file) ?? kind(f.oldFile)])
-    .filter(([, k]) => k)
-    .map(([f, k]) => fact('self-edit', f.file, null, SELF_EDIT_NOTE[k]));
+  const hits = files.map((f) => [f, kind(f.file) ?? kind(f.oldFile)]).filter(([, k]) => k);
+  if (hits.length && hits.every(([, k]) => k === 'scripts') && ctx.headSha && learningPrOnly(ctx.baseSha, ctx.headSha, ctx.repoRoot)) {
+    return [fact('learning-pr', PROJECT_SUBDIR, null, 'learning PR: bot commits confined to learned memory; review the lessons themselves (scope, wording, coverage), not as a self-edit')];
+  }
+  return hits.map(([f, k]) => fact('self-edit', f.file, null, SELF_EDIT_NOTE[k]));
 }
 
 const PIN_RE = /pr-review-kit\/actions\/[\w-]+@([^\s'"]+)/g;
