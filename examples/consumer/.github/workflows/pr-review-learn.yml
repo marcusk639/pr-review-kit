@@ -1,0 +1,56 @@
+# Feedback learning for the PR reviewer (pr-review-kit). Weekly, it reads
+# maintainers' 👍/👎 and replies on the reviewer's comments and proposes memory
+# changes as ONE learning PR to merge, edit or close. Memory reaches the
+# reviewer only through that PR. Replace KIT_SHA as in pr-review.yml.
+# Needs Settings → Actions → "Allow GitHub Actions to create and approve pull
+# requests" for the propose job's token.
+name: PR Review learning
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: pr-review-learning
+  cancel-in-progress: false
+
+jobs:
+  # Holds the Claude token, never a write token.
+  learn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Learn
+        uses: marcusk639/pr-review-kit/actions/learn@KIT_SHA
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+  # Model-free; the only job with a write token.
+  propose:
+    needs: learn
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Propose
+        uses: marcusk639/pr-review-kit/actions/propose@KIT_SHA

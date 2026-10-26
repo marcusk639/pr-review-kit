@@ -89,3 +89,23 @@ test('every engine path is the pinned action path, never the workspace', () => {
   assert.match(stepOf(review, 'Facts'), /run: node "\$\{\{ steps\.paths\.outputs\.kit_root \}\}\/engine\/facts\.mjs"/);
   assert.match(stepOf(review, 'Run start'), /kit_root=\$\(cd "\$\{\{ github\.action_path \}\}\/\.\.\/\.\." && pwd\)/);
 });
+
+const learn = read('learn/action.yml');
+const proposeAction = read('propose/action.yml');
+
+test('the distill model has the review sandbox and cannot write the snapshot apply trusts', () => {
+  const lallow = (/--allowedTools "([^"]+)"/.exec(learn)?.[1] ?? '').split(',');
+  const ldeny = (/--disallowedTools "([^"]+)"/.exec(learn)?.[1] ?? '').split(',');
+  assert.deepEqual(lallow, ['Read', 'Grep', 'Glob', 'Write(/${{ runner.temp }}/pr-review-learn/**)', 'Edit(/${{ runner.temp }}/pr-review-learn/**)']);
+  for (const t of ['Bash', 'WebFetch', 'WebSearch', 'Read(//proc/**)', 'Read(/${{ github.workspace }}/.git/**)', 'Write(/${{ runner.temp }}/learn-snapshot/**)', 'Edit(/${{ runner.temp }}/learn-snapshot/**)', 'Write(/${{ github.workspace }}/**)']) assert.ok(ldeny.includes(t), t);
+  assert.match(learn, /\n\s+--strict-mcp-config\n/);
+  assert.match(learn, /settings: '\{"disableAllHooks": true\}'/);
+  assert.match(stepOf(learn, 'Distill'), /continue-on-error: true/);
+  assert.ok(learn.indexOf('- name: Distill') < learn.indexOf('- name: Apply'));
+});
+
+test('learning: no write token in learn; propose runs no model and gets no Claude token', () => {
+  assert.doesNotMatch(learn, /contents: write|git\/refs|pulls/);
+  assert.doesNotMatch(proposeAction, /claude-code-action|claude_code_oauth_token|secrets\./);
+  assert.match(stepOf(proposeAction, 'Propose'), /NODE_OPTIONS: ""/);
+});

@@ -1,0 +1,35 @@
+name: pr-review-kit propose
+description: >-
+  Model-free: opens or updates the one learning PR from the learn action's
+  artifact. Run in a separate job with contents: write and pull-requests: write,
+  after the learn job, with the default branch checked out (persist-credentials
+  false). Writes only under .claude/pr-review/ and never overwrites a learning
+  branch a maintainer has edited.
+inputs:
+  dry_run:
+    description: "true: print the plan instead of writing."
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Download proposal
+      uses: actions/download-artifact@v4
+      with:
+        name: pr-review-learning
+        path: ${{ runner.temp }}/pr-review-bundle
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+
+    - name: Propose
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        BUNDLE: ${{ runner.temp }}/pr-review-bundle
+        PR_REVIEW_DRY_RUN: ${{ inputs.dry_run == 'true' && '1' || '' }}
+        NODE_OPTIONS: ""
+        BASH_ENV: ""
+      run: node --no-warnings "${{ github.action_path }}/../../engine/learn/propose.mjs"

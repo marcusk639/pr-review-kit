@@ -98,3 +98,14 @@ test('a private repo must not pass advisory secrets it cannot use', () => {
   const r = validateRepo(dir);
   assert.match(r.warnings.join('\n'), /SECURITY_ADVISORY_TOKEN is passed but the security channel is none/);
 });
+
+const LWF = '.github/workflows/pr-review-learn.yml';
+
+test('the learning job must not hold a write token; the propose job holds no secret', () => {
+  assert.match(errorsOf(repo(({ sub }) => sub(LWF, '    permissions:\n      contents: read\n      pull-requests: read', '    permissions:\n      contents: write\n      pull-requests: read'))), /learn job must not have write permissions/);
+  assert.match(errorsOf(repo(({ sub }) => sub(LWF, '      - name: Propose\n        uses:', '      - name: Propose\n        env:\n          T: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}\n        uses:'))), /propose job must not receive secrets/);
+});
+
+test('the learning workflow pins the same kit SHA as the review workflow', () => {
+  assert.match(errorsOf(repo(({ sub }) => sub(LWF, `learn@${SHA}`, `learn@${'c'.repeat(40)}`))), /learning workflow must pin the same kit SHA as the review workflow/);
+});
