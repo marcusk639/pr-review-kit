@@ -11,7 +11,7 @@ import { lstatSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync }
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const INSTRUCTION_FILES = new Set(['CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.ignore', '.rgignore', '.mcp.json', '.claude.json']);
+const INSTRUCTION_FILES = new Set(['CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.ignore', '.rgignore', '.gitignore', '.ripgreprc', '.mcp.json', '.claude.json']);
 // .review-base is the trust checkout (cloned fresh by the action); anything
 // else, .review-publish included, is PR content until replaced.
 const DEFAULT_SKIP = ['.git', '.review-base'];

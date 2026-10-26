@@ -44,7 +44,7 @@ Minimum: `version: 1`, `project`, `classes`. Defaults reproduce the recovery-pla
 | `tiers.disabled`                     | `[]`                                                                                                       | Any of `base-drift`, `light`, `incremental`, `incremental-new-links`; a disabled tier widens to the next.                                                                                                                                 |
 | `tiers.maxTurns`, `tiers.largeShare` | reference caps, `0.5`                                                                                      | A tier whose cap is `0` does not run the model.                                                                                                                                                                                           |
 | `lightFiles`, `lightExclude`         | md/txt/images/lockfiles, `[]`                                                                              | `lightExclude` globs are never light (prompts, `SKILL.md`, `CLAUDE.md`, `.env.example`).                                                                                                                                                  |
-| `withheld`                           | `[]`                                                                                                       | Paths the model may never read: Read denies, stubbed hunks in its diff, no inline comments. Checks and the secret scan still see them.                                                                                                    |
+| `withheld`                           | `[]`                                                                                                       | Paths the model may never read: Read denies (also for the `*.pr-head` variants), stubbed hunks in its diff, no inline comments. Checks and the secret scan still see them. Globs use one ASCII dialect (letters, digits, `. _ - / * ?`, `**` only as a whole segment); anything else is a config error.                                                                                                    |
 | `externalCheckouts`                  | `[]`                                                                                                       | `[{ repo: "owner/name", ref, dir, sparse?: [paths] }]`, public repos, fetched token-free into `.pr-review-external/<dir>` after neutralize, `.git` removed, neutralized, SHA in facts.                                                    |
 | `largePr`                            | 60 files / 5000 lines                                                                                      | Told to the model.                                                                                                                                                                                                                        |
 | `inline`                             | `{ max: 10, severities: [Critical, High] }`                                                                |                                                                                                                                                                                                                                           |
@@ -115,8 +115,8 @@ Secrets map to kit inputs by **role**; the secret's name is yours:
 | `private_repo`            | publish       | `private-repo-issue`: `${{ vars.PR_REVIEW_PRIVATE_REPO }}` (a repository variable, never a literal) |
 
 Optional `redact_terms` (a secret, newline-separated literals such as a tenant name) may be passed to review,
-publish and learn: removed from facts.md, every posted text and everything the learning job proposes; never in
-config, never to the model. `config.style { noEmoji, noEmDash }` applies to posted text.
+publish and learn: removed from facts.md, pr.diff, increment.diff, commits.txt, state.json, every posted text and everything the
+learning job proposes (a proposal containing one is rejected); never in config. Terms under 3 characters are ignored. `config.style { noEmoji, noEmDash }` applies to posted text.
 
 Merged PRs: to also review PRs that merge before a review finishes, add `closed` to the trigger types and
 `(github.event.action != 'closed' || github.event.pull_request.merged) &&` to the job `if:` (validate requires the
@@ -128,7 +128,7 @@ entries are knowledge-file names or globs relative to `.pr-review/` (e.g. `maps/
 error.
 
 Pass `trust_sha: ${{ steps.review.outputs.trust_sha }}` to publish. Any other secret is a `validate` error
-(`GITHUB_TOKEN` excepted).
+(`GH_TOKEN` excepted).
 
 ## 5. Check it locally
 

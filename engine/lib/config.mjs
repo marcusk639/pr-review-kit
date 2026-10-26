@@ -47,7 +47,7 @@ export const DEFAULTS = Object.freeze({
     project: [],
     timeoutMs: 20000,
   },
-  trust: { contextAssociations: ['OWNER', 'MEMBER', 'COLLABORATOR'], feedbackAuthors: ['repository-owner'] },
+  trust: { contextAssociations: ['OWNER'], feedbackAuthors: ['repository-owner'] },
   learning: { windowDays: 45, repeatThreshold: 2, maxLessons: 40, demote: { minVotes: 5, maxPrecision: 0.4 }, distill: 'model', branch: 'pr-review/learning', forbidden: [], commands: { format: [], validate: [] } },
 });
 
@@ -68,7 +68,7 @@ const classNode = obj({
 });
 
 const checkoutNode = custom((v, d, path, errors) => {
-  const ok = isObj(v) && /^[\w.-]+\/[\w.-]+$/.test(v.repo ?? '') && typeof v.ref === 'string' && BRANCH_RE.test(v.ref) && /^[\w.-]{1,60}$/.test(v.dir ?? '') && (v.sparse === undefined || (Array.isArray(v.sparse) && v.sparse.every((x) => typeof x === 'string' && !x.includes('..'))));
+  const ok = isObj(v) && /^[\w.-]+\/[\w.-]+$/.test(v.repo ?? '') && typeof v.ref === 'string' && BRANCH_RE.test(v.ref) && /^(?!\.{1,2}$)[\w.-]{1,60}$/.test(v.dir ?? '') && !String(v.ref).startsWith('-') && (v.sparse === undefined || (Array.isArray(v.sparse) && v.sparse.every((x) => typeof x === 'string' && !x.includes('..'))));
   if (!ok) {
     errors.push(`${path} must be { repo: "owner/name", ref, dir (one path segment), sparse?: [paths] }`);
     return undefined;

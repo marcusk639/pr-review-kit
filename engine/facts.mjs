@@ -24,6 +24,7 @@ import { readAt } from './lib/git-read.mjs';
 import { withheldDenies } from './lib/withheld.mjs';
 import { mergeFromBase, writeCollaborators } from './lib/repo-facts.mjs';
 import { verifyLearningPr } from './lib/learning-pr.mjs';
+import { isEdited } from './lib/feedback.mjs';
 import { buildFacts } from './lib/facts-render.mjs';
 import { checkSecrets, checkPiiLogs, checkNewFileSize, checkTitleScope, checkSelfEdit, checkEnginePin, runVerifyDiff } from './hygiene.mjs';
 
@@ -42,7 +43,8 @@ export async function gatherContext(repo, pr, pull, list = listIssueComments) {
     const body = trusted(pull)
       ? `PR description:\n${redact(String(pull?.body ?? ''))}`
       : 'PR description withheld: the PR author is not a repository maintainer.';
-    const comments = (await list(repo, pr)).filter((c) => trusted(c) && !String(c.body ?? '').startsWith(SUMMARY_MARKER));
+    // Edited comments no longer say what they said when the author was trusted.
+    const comments = (await list(repo, pr)).filter((c) => trusted(c) && !isEdited(c) && !String(c.body ?? '').startsWith(SUMMARY_MARKER));
     const parts = [body];
     for (const c of comments) parts.push(`Comment:\n${redact(String(c.body ?? '')).slice(0, MAX_COMMENT)}`);
     return parts.join('\n\n');

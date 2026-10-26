@@ -63,7 +63,7 @@ publish step clears NODE_OPTIONS and BASH_ENV and runs pinned engine code that t
   `/proc`, the runner's `~/.claude` and `~/.config`, the command files, and `config.withheld` paths.
 - **Neutralize PR head** (model-free, after the knowledge restore and before facts): symlinks become placeholder files;
   `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` at any depth (root included), nested `.claude/`, `.ignore`,
-  `.rgignore`, `.mcp.json`, `.claude.json` are set aside as `*.pr-head`; the root `.claude/settings*.json` removed.
+  `.rgignore`, `.gitignore`, `.ripgreprc`, `.mcp.json`, `.claude.json` are set aside as `*.pr-head`; the root `.claude/settings*.json` removed.
   Failing to neutralize fails the job (publish then reports an incomplete review).
 - Facts and project checks read PR files from git objects (`readHead`/`readBase`/`listFiles`) or with containment
   checks; nothing follows a link; nothing from the PR is executed. Facts does every GitHub read first and drops
@@ -75,8 +75,8 @@ publish step clears NODE_OPTIONS and BASH_ENV and runs pinned engine code that t
   inside facts through a check's `python3 -c`).
 - The review model may write only `inline.json`, `findings.json` and `summary.md`; the distill model only
   `proposals.json` (OUT is an `--add-dir`, from which Claude Code would load `.claude/` config).
-- `id-token: write` stays: with an OAuth token and no `github_token` input, claude-code-action obtains its App
-  token through OIDC. Dropping it means passing `github_token`, which changes the action's identity; verify in the
+- `id-token: write` stays: with an OAuth token and no `GH_TOKEN` input, claude-code-action obtains its App
+  token through OIDC. Dropping it means passing `GH_TOKEN`, which changes the action's identity; verify in the
   skeleton run before changing.
 - External counterparts (`externalCheckouts`, public repos): fetched after neutralize, token-free (no credential
   helper, no prompt), sparse, `core.symlinks=false`, `.git` deleted, neutralized, SHA in facts; failure is
@@ -139,8 +139,10 @@ listFiles})`. A tier whose `maxTurns` is 0 does not run the model.
 - **Landing:** the learn job (no write token) runs `learning.commands` (format, validate) on a scratch copy of the
   proposed tree; a failure proposes nothing. The propose job (model-free, the only write token) commits only under
   `.pr-review/`, keeps one learning PR, and never overwrites a branch a maintainer edited. A learning PR is spared
-  the High self-edit finding only when every commit is the bot's and every change is inside the managed blocks
-  and `learned/*.json`. PRs opened by `GITHUB_TOKEN` trigger no workflows: the learn job's own commands are the
+  the High self-edit finding only when the GitHub API shows a bot-opened PR from the learning branch whose every
+  commit has the bot as author and committer login (git author names are ignored: a pusher sets them), and every
+  change is inside the managed blocks and `learned/*.json` with the shapes the learning job writes. propose writes
+  only `learned/*.json` and the knowledge files the loop may edit, never through a link, each under 512 KB. PRs opened by `GH_TOKEN` trigger no workflows: the learn job's own commands are the
   check.
 
 ## 8. Known tradeoffs
@@ -184,7 +186,7 @@ inline in private mode (every public surface is pointer-only).
 Engine: `npm test` (ported reference tests plus config, tiers, project checks, git reads, neutralize, externals,
 withheld, private channels, feedback marker, learning fixtures, learn commands, learning-PR exemption, workflow
 checks, dry-run). Workflows: actionlint on the examples and on local usage of all four actions. Still needs
-GitHub (in the runbook): whether `GITHUB_TOKEN` can list collaborators (Metadata read), the canary PR, whether
+GitHub (in the runbook): whether `GH_TOKEN` can list collaborators (Metadata read), the canary PR, whether
 claude-code-action runs on `schedule`/`workflow_dispatch` with an OAuth token, and whether git-data-API commits by
-`GITHUB_TOKEN` carry `author.login == github-actions[bot]` (the edited-branch guard and the learning-PR exemption
+`GH_TOKEN` carry `author.login == github-actions[bot]` (the edited-branch guard and the learning-PR exemption
 rely on the author).

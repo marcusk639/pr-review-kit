@@ -5,11 +5,12 @@
 // any commit not authored by the bot (a maintainer's edit) is never
 // overwritten: the PR gets a note that newer proposals are waiting.
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ghRequest } from '../lib/gh.mjs';
 import { loadProject, PROJECT_SUBDIR } from '../lib/config.mjs';
+import { matches } from '../lib/glob.mjs';
 
 const BOT = 'github-actions[bot]';
 const TITLE = 'chore: pr-review learned memory from review feedback';
@@ -31,11 +32,19 @@ async function noteOnce(repo, pr, request) {
   if (last?.body !== NOTE) await request('POST', `/repos/${repo}/issues/${pr.number}/comments`, { body: NOTE });
 }
 
-function readBundle(dir) {
+const MAX_FILE = 512 * 1024;
+
+// allowed: the exact paths a learning PR may write (learned/*.json and the
+// knowledge files the learning loop may edit); never config, checks or REVIEW.md.
+function readBundle(dir, allowed) {
   const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
   const files = Array.isArray(manifest.files) ? manifest.files : [];
   for (const f of files) {
     if (typeof f !== 'string' || !f.startsWith(`${PROJECT_SUBDIR}/`) || f.includes('..')) throw new Error(`bundle path outside ${PROJECT_SUBDIR}: ${f}`);
+    if (allowed && !allowed.includes(f)) throw new Error(`bundle path is not a learned file: ${f}`);
+    const st = lstatSync(join(dir, f));
+    if (st.isSymbolicLink() || !st.isFile()) throw new Error(`bundle path is a symlink or not a file: ${f}`);
+    if (st.size > MAX_FILE) throw new Error(`bundle file too large: ${f}`);
   }
   return { manifest, files, body: readFileSync(join(dir, 'pr-body.md'), 'utf8') };
 }
@@ -54,8 +63,15 @@ async function openPr(repo, owner, branch, request) {
   return Array.isArray(list) && list.length ? list[0] : null;
 }
 
-export async function propose({ repo, branch, bundleDir, request = ghRequest, dryRun = false, write = (s) => process.stdout.write(s) }) {
-  const { manifest, files, body } = readBundle(bundleDir);
+export const learnedPaths = (config) => [
+  `${PROJECT_SUBDIR}/learned/lessons.json`,
+  `${PROJECT_SUBDIR}/learned/precision.json`,
+  ...config.knowledge.filter((k) => !config.learning.forbidden.some((g) => g === k || matches(k, g))).map((k) => `${PROJECT_SUBDIR}/${k}`),
+];
+
+export async function propose({ repo, branch, bundleDir, allowed, request = ghRequest, dryRun = false, write = (s) => process.stdout.write(s) }) {
+  if (!Array.isArray(allowed)) throw new Error('propose needs the allowed learned paths');
+  const { manifest, files, body } = readBundle(bundleDir, allowed);
   if (!manifest.hasChanges || !files.length) return 'learning: no changes to propose';
   const owner = repo.split('/')[0];
   const main = (await request('GET', `/repos/${repo}`)).default_branch;
@@ -96,7 +112,7 @@ export async function propose({ repo, branch, bundleDir, request = ghRequest, dr
 async function main(env = process.env) {
   const project = loadProject(join(env.PR_REVIEW_LEARN_ROOT || '.', PROJECT_SUBDIR));
   if (project.errors.length) return console.log('::warning::pr-review learning skipped: project config missing or invalid');
-  const status = await propose({ repo: env.REPO, branch: project.config.learning.branch, bundleDir: env.BUNDLE, dryRun: env.PR_REVIEW_DRY_RUN === '1' });
+  const status = await propose({ repo: env.REPO, branch: project.config.learning.branch, bundleDir: env.BUNDLE, allowed: learnedPaths(project.config), dryRun: env.PR_REVIEW_DRY_RUN === '1' });
   console.log(status);
 }
 

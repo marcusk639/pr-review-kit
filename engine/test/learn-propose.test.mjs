@@ -46,7 +46,8 @@ function github({ branch = null, branchCommits = [], openPr = null } = {}) {
   return api;
 }
 
-const run = (gh, dir, extra = {}) => propose({ repo: 'o/r', branch: 'pr-review/learning', bundleDir: dir, request: gh.request, ...extra });
+const ALLOWED = ['.pr-review/false-positives.md', '.pr-review/learned/lessons.json'];
+const run = (gh, dir, extra = {}) => propose({ repo: 'o/r', branch: 'pr-review/learning', bundleDir: dir, allowed: ALLOWED, request: gh.request, ...extra });
 const writes = (gh) => gh.calls.filter((c) => c.method !== 'GET').map((c) => `${c.method} ${c.path}`);
 
 test('first proposal: one commit on a new branch off the default branch, then one PR', async () => {

@@ -26,13 +26,31 @@ const isBot = (u) => !u || u.type === 'Bot' || u.login === BOT_AUTHOR || /\[bot\
 export const isEdited = (c) => Boolean(c?.updated_at && c?.created_at && c.updated_at !== c.created_at);
 
 // The comment's own lines: code fences and quoted lines (someone else's words) removed.
+// Fences (``` and ~~~), HTML comments, <details> and <blockquote> blocks,
+// indented code, and quotes with their lazy continuation lines are not the
+// author's own words.
 function ownLines(body) {
-  return String(body ?? '')
-    .replace(/```[\s\S]*?(```|$)/g, '')
-    .split('\n')
-    .filter((l) => !/^\s*>/.test(l))
-    .map((l) => l.trim())
-    .filter(Boolean);
+  const text = String(body ?? '')
+    .replace(/```[\s\S]*?(```|$)/g, '\n')
+    .replace(/~~~[\s\S]*?(~~~|$)/g, '\n')
+    .replace(/<!--[\s\S]*?(-->|$)/g, '\n')
+    .replace(/<details[\s\S]*?(<\/details>|$)/gi, '\n')
+    .replace(/<blockquote[\s\S]*?(<\/blockquote>|$)/gi, '\n');
+  const out = [];
+  let inQuote = false;
+  for (const l of text.split('\n')) {
+    if (!l.trim()) {
+      inQuote = false;
+      continue;
+    }
+    if (/^\s*>/.test(l)) {
+      inQuote = true;
+      continue;
+    }
+    if (inQuote || /^( {4}|\t)/.test(l)) continue;
+    out.push(l.trim());
+  }
+  return out;
 }
 
 // Feedback text: present only when the first own line starts with "review:".

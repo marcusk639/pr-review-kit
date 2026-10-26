@@ -22,7 +22,7 @@ test('normalizeConfig fills the reference defaults', () => {
   assert.equal(config.checks.secrets, true);
   assert.equal(config.checks.titleScope, false);
   assert.equal(config.checks.verifyDiff, false);
-  assert.deepEqual(config.trust.contextAssociations, ['OWNER', 'MEMBER', 'COLLABORATOR']);
+  assert.deepEqual(config.trust.contextAssociations, ['OWNER']);
   assert.deepEqual(config.trust.feedbackAuthors, ['repository-owner']);
   assert.equal(config.workflowPath, '.github/workflows/pr-review.yml');
   assert.equal(config.learning.distill, 'model');
