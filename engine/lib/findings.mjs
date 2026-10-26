@@ -26,8 +26,15 @@ export const MAX_FINDINGS = 200;
 const MAX_LOCATIONS = 10;
 const FIELD_CAPS = { package: 100, area: 100, title: 300, feature: 300, why: 2000, fix: 2000 };
 
+// On a verified private channel nothing is withheld: a security finding is
+// published like any other, labelled (securityLabel) instead of withheld.
+function securityOf(f, project = activeProject()) {
+  if (!project.privateVerified) return { security: f.security || isForcedSecurity(f.class, f.slug) };
+  return { security: false, securityLabel: f.security || securityClasses(project.config).has(f.class) };
+}
+
 function capFinding(f) {
-  const out = { ...f, security: f.security || isForcedSecurity(f.class, f.slug), locations: f.locations.slice(0, MAX_LOCATIONS).map((l) => ({ ...l, file: l.file.slice(0, 300) })) };
+  const out = { ...f, ...securityOf(f), locations: f.locations.slice(0, MAX_LOCATIONS).map((l) => ({ ...l, file: l.file.slice(0, 300) })) };
   for (const [k, n] of Object.entries(FIELD_CAPS)) out[k] = f[k].slice(0, n);
   return out;
 }

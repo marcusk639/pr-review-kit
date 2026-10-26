@@ -40,7 +40,7 @@ function renderFinding(f, needles, isNew, clause) {
   if (touchesSecurityFile(f, needles)) return `- **${WITHHELD_TITLE}** (confidence: ${f.confidence})${fresh}`;
   const again = f.reraise ? ` (re-raised after 👎: ${clean(f.reraise, 300)})` : '';
   return [
-    `- **${clean(f.title, 200)}** (confidence: ${f.confidence})${fresh}${f.inlinePosted ? ' (inline comment posted)' : ''}${again} · \`${handleOf(f.slug)}\``,
+    `- **${f.securityLabel ? 'security-relevant: ' : ''}${clean(f.title, 200)}** (confidence: ${f.confidence})${fresh}${f.inlinePosted ? ' (inline comment posted)' : ''}${again} · \`${handleOf(f.slug)}\``,
     `  - Where: ${f.locations.map(where).join('; ')}`,
     `  - Why: ${clean(f.why)}`,
     `  - Fix: ${clean(f.fix)}`,

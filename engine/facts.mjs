@@ -17,7 +17,7 @@ import { computeIncrement } from './lib/increment.mjs';
 import { writeMaterial } from './lib/material.mjs';
 import { SUMMARY_MARKER } from './lib/markers.mjs';
 import { runPaths } from './lib/paths.mjs';
-import { activeProject, loadProject, setActiveProject } from './lib/config.mjs';
+import { PROJECT_SUBDIR, activeProject, loadProject, setActiveProject } from './lib/config.mjs';
 import { loadProjectChecks, runProjectChecks } from './lib/project-checks.mjs';
 import { demotedClasses, readPrecision } from './learn/precision.mjs';
 import { buildFacts } from './lib/facts-render.mjs';
@@ -28,7 +28,6 @@ export { buildFacts };
 const MAX_COMMENT = 2000;
 const MAX_CHANGED = 3000;
 const ENGINE_DIR = dirname(fileURLToPath(import.meta.url));
-export const PROJECT_SUBDIR = '.claude/pr-review';
 
 // Only maintainers' words reach the model (config.trust.contextAssociations):
 // in a public repo any other commenter could otherwise plant instructions.

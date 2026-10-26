@@ -5,6 +5,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+// Where a consumer keeps its reviewer project, relative to a checkout root.
+export const PROJECT_SUBDIR = '.claude/pr-review';
+
 const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 const PROJECT_RE = /^[A-Za-z0-9._-]{1,60}$/;
 

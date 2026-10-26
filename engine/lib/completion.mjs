@@ -21,7 +21,7 @@ export function failureReason(executionLog) {
 // A finding a trusted maintainer 👎'd on this PR (state.feedback.rejectedSlugs)
 // is not re-raised unless the model says why it is materially worse
 // (reraise). Critical and security findings are never dropped here.
-const keepRejected = (f) => Boolean(f.reraise) || f.security || f.severity === 'Critical';
+const keepRejected = (f) => Boolean(f.reraise) || f.security || f.securityLabel || f.severity === 'Critical';
 
 export function completion(state, findingsText, outcome, narrative) {
   if (!isObject(state) || outcome !== 'success' || state.tier === 'none') return { findings: null, reason: null, suppressed: 0 };

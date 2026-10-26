@@ -1,11 +1,11 @@
-import './helpers/rp.mjs';
+import { RP_DIR } from './helpers/rp.mjs';
 // Round 3: publish never claims a review it did not finish, never posts for a
 // head the PR has moved past, and makes every skip or failure visible
 // (::warning:: plus one job-summary status line).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,7 +20,7 @@ const BASE = 'd'.repeat(40);
 const OLD = 'e'.repeat(40);
 const KEY = 'test-id-key';
 const BOT = { login: 'github-actions[bot]' };
-const PUBLISH = join(dirname(fileURLToPath(import.meta.url)), '../publish.mjs');
+const PUBLISH = join(dirname(fileURLToPath(import.meta.url)), '../run-publish.mjs');
 
 const LOW = { slug: 'c9:regroup/mobile/src/a.ts:x', class: 9, severity: 'Low', confidence: 'high', security: false, package: 'regroup/mobile', area: 'data', title: 'Minor thing', feature: 'Feed', locations: [{ file: 'regroup/mobile/src/a.ts', line: 3, side: 'changed' }], why: 'w', fix: 'x' };
 const SEC = { ...LOW, slug: 'c1:regroup/functions/src/pay.ts:charge', class: 1, severity: 'High', security: true, package: 'regroup/functions', area: 'payments', locations: [{ file: 'regroup/functions/src/pay.ts', line: 9, side: 'changed' }] };
@@ -185,10 +185,11 @@ test('runPaths needs both OUT and STATE_FILE', () => {
 test('publish main without OUT/STATE_FILE fails closed: warns, posts nothing, exits 0', () => {
   const dir = mkdtempSync(join(tmpdir(), 'prr-'));
   const summary = join(dir, 'step.md');
+  cpSync(RP_DIR, join(dir, 'checkout/.claude/pr-review'), { recursive: true });
   // No network: every GitHub call fails, so the comment cannot be read either.
   const stub = 'data:text/javascript,globalThis.fetch=async()=>{throw new Error("offline")}';
   const out = execFileSync(process.execPath, ['--no-warnings', '--import', stub, PUBLISH], {
-    env: { PATH: process.env.PATH, REPO: 'o/r', PR: '7', HEAD_SHA: HEAD, BASE_SHA: BASE, ACTION_OUTCOME: 'success', GITHUB_STEP_SUMMARY: summary },
+    env: { PATH: process.env.PATH, REPO: 'o/r', PR: '7', HEAD_SHA: HEAD, BASE_SHA: BASE, ACTION_OUTCOME: 'success', GITHUB_STEP_SUMMARY: summary, PR_REVIEW_PUBLISH: join(dir, 'checkout') },
     encoding: 'utf8',
   });
   assert.match(out, /::warning::pr-review OUT or STATE_FILE unset/);
@@ -251,4 +252,16 @@ test('with routing.json unreadable (linkTypes null) prior link types are carried
   const { priorPayload } = await import('../lib/prior.mjs');
   assert.deepEqual(priorPayload({ linkTypesSeen: ['callable', 7] }, KEY, null).linkTypesSeen, ['callable']);
   assert.deepEqual(priorPayload({ linkTypesSeen: ['callable', 'bogus'] }, KEY, ['callable']).linkTypesSeen, ['callable']);
+});
+
+test('publish main without a valid project config on base posts nothing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'prr-'));
+  const summary = join(dir, 'step.md');
+  const stub = 'data:text/javascript,globalThis.fetch=async()=>{throw new Error("network used")}';
+  const out = execFileSync(process.execPath, ['--no-warnings', '--import', stub, PUBLISH], {
+    env: { PATH: process.env.PATH, REPO: 'o/r', PR: '7', HEAD_SHA: HEAD, BASE_SHA: BASE, ACTION_OUTCOME: 'success', GITHUB_STEP_SUMMARY: summary, PR_REVIEW_PUBLISH: dir },
+    encoding: 'utf8',
+  });
+  assert.match(out, /::warning::pr-review project config missing or invalid on the base branch; nothing published/);
+  assert.match(readFileSync(summary, 'utf8'), /^pr-review: skipped: project config missing or invalid/);
 });

@@ -1,20 +1,20 @@
 // Publishes the PR review: the inline comments from OUT/inline.json (as one PR
 // review), private advisories for security findings, then the one summary
 // comment from OUT/{findings.json,summary.md} and the trusted STATE_FILE
-// snapshot (never OUT/state.json). Runs from a fresh base-SHA checkout after
-// the model has finished, so nothing the model wrote can change this code.
+// snapshot (never OUT/state.json). Runs from the kit's pinned action path
+// after the model has finished, with the project config from a fresh base
+// checkout, so nothing the model wrote can change this code or its config.
+// Entry point: run-publish.mjs.
 // A run for a head the PR has moved past posts nothing. Logs status codes
 // only, warns on anything that leaves the summary stale, writes one status
 // line to the job summary, and always exits 0.
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ghRequest, listIssueComments, listReviewComments, upsertSummary } from './lib/gh.mjs';
+import { listIssueComments, upsertSummary } from './lib/gh.mjs';
 import { encodeLedger } from './lib/markers.mjs';
 import { fitMarker, ledgerSlug, markResolved, mergeLedger, opaqueId, reportedBy, visibleEntries } from './lib/ledger.mjs';
 import { MAX_MARKER, renderSummary } from './lib/render.mjs';
 import { completedFindings, completion, failureReason, isPartial, outcomeLabel } from './lib/completion.mjs';
-import { DELIVERED, NOT_DELIVERED, NO_KEY, deliver } from './lib/deliver.mjs';
+import { DELIVERED, NOT_DELIVERED, NO_CHANNEL, NO_KEY, deliver } from './lib/deliver.mjs';
+import { verifyPrivateChannel } from './lib/private-channel.mjs';
 import { isObject, priorFromComment, priorPayload, resolvePrior, sha, strings } from './lib/prior.mjs';
 import { currentHead, fallbackSummary, postSummary, statusOf } from './lib/summary-post.mjs';
 import { stepSummary, warn } from './lib/status.mjs';
@@ -22,7 +22,6 @@ import { touchesSecurityFile } from './lib/needles.mjs';
 import { priorFileIds, runNeedles } from './lib/fileids.mjs';
 import { runInline, INLINE_NOTICE } from './lib/inline-stage.mjs';
 import { deliverAdvisories } from './advisories.mjs';
-import { runPaths } from './lib/paths.mjs';
 import { activeProject } from './lib/config.mjs';
 
 export { INLINE_NOTICE, priorFromComment, failureReason };
@@ -136,29 +135,11 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     newSlugs: newSlugs(findings.findings, prior, idKey, needles),
     carried: visible.filter((e) => e.status === 'open' && !reported(e)),
     resolved: visible.filter((e) => e.status === 'resolved'),
-    securityClause: idKey ? securityClause : NO_KEY,
+    securityClause: idKey || securityClause === NO_CHANNEL ? securityClause : NO_KEY,
     notices: [...notices, ...(suppressed ? [rejectedNotice(suppressed)] : []), ...frozenNotice(idKey, prior.ledger, findings.findings, needles)],
     rawMarker,
     partial: isPartial(s),
   });
-}
-
-function readOptional(path) {
-  try {
-    return readFileSync(path, 'utf8');
-  } catch {
-    return null;
-  }
-}
-
-// Reads facts' snapshot (STATE_FILE, outside the model's --add-dir), never
-// OUT/state.json, which the model can overwrite.
-function readState(path) {
-  try {
-    return JSON.parse(readFileSync(path, 'utf8'));
-  } catch {
-    return null;
-  }
 }
 
 // The marker the summary carried before this run, for the minimal retry body.
@@ -174,7 +155,19 @@ function previousMarker(snapshot, fallback, rawMarker, idKey) {
 // not read the prior state and publish cannot either. Both cases warn; the
 // second also tries the minimal banner, which only ever replaces a summary it
 // found and keeps that summary's marker.
+// A private repo's own comments are its security channel only when publish
+// has just verified who can read them; otherwise security detail is withheld.
+async function checkChannel(repo, request) {
+  const project = activeProject();
+  project.privateVerified = false;
+  if (project.config.securityChannel !== 'repo-comments') return;
+  const v = await verifyPrivateChannel(repo, project.config.privateReaders, request);
+  project.privateVerified = v.verified;
+  if (!v.verified) warn(`private channel not verified (${v.reason}); security details withheld`);
+}
+
 async function publishRun({ repo, pr, snapshot: trusted, advisoryToken, ...rest }, deps) {
+  await checkChannel(repo, deps.request);
   const head = sha(rest.headSha);
   const check = await currentHead(repo, pr, deps.request);
   if (head && check.sha && check.sha !== head) {
@@ -248,42 +241,4 @@ export async function publish(args, deps = { listIssueComments, upsertSummary })
   }
   report(status);
   return status;
-}
-
-async function main() {
-  try {
-    const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, PR_REVIEW_ID_KEY, ADVISORY_TOKEN, RUN_STARTED_AT } = process.env;
-    // Fail closed without OUT and STATE_FILE: no snapshot, no model output, so
-    // the failure banner (prior state from the comment) or nothing at all.
-    const run = runPaths();
-    if (!run) warn('OUT or STATE_FILE unset; publishing the failure banner only');
-    const fromOut = (name) => (run ? readOptional(join(run.out, name)) : null);
-    const deps = { listIssueComments, upsertSummary, listReviewComments, request: ghRequest };
-    await publish({
-      repo: REPO,
-      pr: PR,
-      snapshot: run ? readState(run.stateFile) : null,
-      findingsText: fromOut('findings.json'),
-      inlineText: fromOut('inline.json'),
-      // null when the model never wrote it: the review is then not complete.
-      narrative: fromOut('summary.md'),
-      outcome: ACTION_OUTCOME,
-      executionLog: EXECUTION_FILE ? readOptional(EXECUTION_FILE) : null,
-      headSha: HEAD_SHA,
-      baseSha: BASE_SHA,
-      runStartedAt: RUN_STARTED_AT || null,
-      idKey: PR_REVIEW_ID_KEY || null,
-      // Advisory requests only; never passed to the summary comment calls.
-      advisoryToken: ADVISORY_TOKEN || null,
-    }, deps);
-  } catch (err) {
-    // Never log bodies, tokens or messages; status only.
-    warn(`publish failed (${statusOf(err)})`);
-    stepSummary(`publish failed (${statusOf(err)})`);
-  }
-  process.exit(0);
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await main();
 }
