@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 // Consumer tooling for pr-review-kit. Run from the consumer repo's root.
-//   local --base <sha> --head <sha> [--findings f.json] [--summary s.md] [--inline i.json]
-//         [--show-private] [--assume-private-verified]
+//   local --base <sha> --head <sha> [--project <dir>] [--findings f.json] [--summary s.md]
+//         [--inline i.json] [--show-private] [--assume-private-verified]
 //     Facts against the local repo (offline: no GitHub, no prior state), with
-//     the project read from the base commit, then publish in dry-run mode.
+//     the project read from the base commit (or --project, a working copy of
+//     .claude/pr-review), then publish in dry-run mode.
 //   validate [--workflow <path>]
 //     Checks .claude/pr-review/ and the review workflow (see engine/validate.mjs).
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,10 +30,10 @@ function args(argv) {
 
 const git = (a, cwd) => execFileSync('git', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
-// The base commit's .claude/pr-review and .github, as the workflow's base checkout would have them.
+// The base commit's .claude and .github, as the workflow's base checkout would have them.
 function baseCheckout(base, cwd, dir) {
   mkdirSync(dir, { recursive: true });
-  for (const path of ['.claude/pr-review', '.github']) {
+  for (const path of ['.claude', '.github']) {
     try {
       const tar = execFileSync('git', ['archive', '--format=tar', base, path], { cwd, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024 });
       execFileSync('tar', ['-x', '-C', dir], { input: tar });
@@ -50,6 +51,12 @@ async function local(o) {
   const tmp = mkdtempSync(join(tmpdir(), 'pr-review-local-'));
   const baseDir = join(tmp, 'base');
   baseCheckout(base, cwd, baseDir);
+  if (o.project) {
+    // A working copy of the project (drafting knowledge before it is committed).
+    const dest = join(baseDir, '.claude/pr-review');
+    rmSync(dest, { recursive: true, force: true });
+    cpSync(o.project, dest, { recursive: true });
+  }
   const out = join(tmp, 'out');
   const ghOut = join(tmp, 'github-output');
   writeFileSync(ghOut, '');

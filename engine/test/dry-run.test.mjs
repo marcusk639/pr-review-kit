@@ -1,7 +1,7 @@
 import { test, before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -105,4 +105,32 @@ test('bin local without findings renders the "did not complete" banner, never a 
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /review did not complete/);
   assert.doesNotMatch(r.stdout, /No issues found/);
+});
+
+test('bin local --project uses a working copy of the project instead of the base commit', () => {
+  const proj = mkdtempSync(join(tmpdir(), 'proj-'));
+  writeFileSync(join(proj, 'config.json'), JSON.stringify({ version: 1, project: 'draft', classes: [{ id: 9, name: 'silent failure' }] }));
+  writeFileSync(join(proj, 'routing.json'), JSON.stringify([{ linkType: 'draft-link', paths: ['src/**'], counterparts: [], classes: [9] }]));
+  const r = spawnSync('node', [BIN, 'local', '--base', base, '--head', head, '--project', proj], { cwd: root, encoding: 'utf8', env: { ...process.env, GITHUB_ACTIONS: '' } });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /## Link types\n- draft-link/);
+  assert.match(r.stdout, /Project: draft\./);
+});
+
+test('the example consumer: its project check reports a route no client uses', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'example-'));
+  cpSync(fileURLToPath(new URL('../../examples/consumer/', import.meta.url)), dir, { recursive: true });
+  const g = (...a) => execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { cwd: dir, encoding: 'utf8' }).trim();
+  g('init', '-q', '-b', 'main');
+  g('add', '-A');
+  g('commit', '-qm', 'base');
+  const b = g('rev-parse', 'HEAD');
+  writeFileSync(join(dir, 'src/api.ts'), "// GET /api/items\nexport const routes = { items: '/api/items', orders: '/api/orders' };\n");
+  g('commit', '-qam', 'feat: orders route');
+  const h = g('rev-parse', 'HEAD');
+  const r = spawnSync('node', [BIN, 'local', '--base', b, '--head', h], { cwd: dir, encoding: 'utf8', env: { ...process.env, GITHUB_ACTIONS: '' } });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /\[route-clients\] src\/api\.ts:2: route \/api\/orders not referenced under web\//);
+  assert.match(r.stdout, /\[route-clients\] src\/api\.ts:2: route \/api\/items used in: web\/client\.ts/);
+  assert.match(r.stdout, /## Link types\n- api-route/);
 });
