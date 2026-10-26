@@ -58,6 +58,7 @@ function projectSection(project) {
     `Project: ${c.project}. Visibility: ${c.visibility}; security channel: ${c.securityChannel}.`,
     `Knowledge files: ${c.knowledge.join(', ')}`,
     `Large PR: more than ${c.largePr.files} files or ${c.largePr.lines} lines.`,
+    `Inline comments: ${c.inline.severities.join(', ')} findings only; at most ${c.inline.max} per run.`,
     ...(demoted.length ? [`Demoted classes (low precision; report only at high confidence, no inline comment): ${demoted.join(', ')}`] : []),
     '',
     'Bug classes:',

@@ -67,6 +67,7 @@ test('facts.md states the project setup the procedure depends on', () => {
   assert.match(out, /- 13: PR text that claims things the code doesn't do \(always\)/);
   assert.match(out, /Demoted classes \(low precision; report only at high confidence, no inline comment\): 9/);
   assert.match(out, /Knowledge files: checklist\.md/);
+  assert.match(out, /Inline comments: Critical, High findings only; at most 10 per run\./);
 });
 
 // End to end, offline: a temp repo with base and head commits and a base checkout.
