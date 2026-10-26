@@ -64,7 +64,7 @@ test('facts.md states the project setup the procedure depends on', () => {
   assert.match(out, /## Project\n/);
   assert.match(out, /Visibility: public; security channel: advisory/);
   assert.match(out, /- 1: Client-supplied IDs trusted for authorisation or money routing \(security\)/);
-  assert.match(out, /- 13: PR text that claims things the code doesn't do \(always\)/);
+  assert.match(out, /- 13: PR text that claims things the code doesn't do \(always, light\)/);
   assert.match(out, /Demoted classes \(low precision; report only at high confidence, no inline comment\): 9/);
   assert.match(out, /Knowledge files: checklist\.md/);
   assert.match(out, /Inline comments: Critical, High findings only; at most 10 per run\./);

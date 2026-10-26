@@ -61,10 +61,11 @@ const ratio = (c) => (c.up + c.down ? c.up / (c.up + c.down) : null);
 export function demotedClasses(precision, config) {
   const { minVotes, maxPrecision } = config.learning.demote;
   const security = securityClasses(config);
+  const protectedIds = new Set(config.classes.filter((k) => k.protected).map((k) => k.id));
   const out = new Set();
   for (const [k, c] of Object.entries(totals(precision).classes)) {
     const id = Number(k);
-    if (security.has(id) || c.up + c.down < minVotes) continue;
+    if (security.has(id) || protectedIds.has(id) || c.up + c.down < minVotes) continue;
     if (ratio(c) <= maxPrecision) out.add(id);
   }
   return out;

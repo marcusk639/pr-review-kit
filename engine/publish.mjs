@@ -93,7 +93,7 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
   const prior = priorPayload(s, idKey, linkTypes);
   if (s.tier === 'none' && outcome === 'skipped') return noChangeBody(prior, headSha, baseSha, notices, rawMarker);
   // Tier "none" never runs the model, so a "success" alongside it is not trusted.
-  const { findings: completed, reason, suppressed } = completion(s, findingsText, outcome, narrative);
+  const { findings: completed, reason, suppressed, belowFloor } = completion(s, findingsText, outcome, narrative);
   if (!completed) {
     const lines = [...notices, ...frozenNotice(idKey, prior.ledger, [], [])];
     return renderSummary({ state: s, findings: null, narrative: '', outcome: 'failure', reason: reason ?? failureReason(executionLog), ledger: prior, notices: lines, rawMarker });
@@ -135,7 +135,7 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     carried: visible.filter((e) => e.status === 'open' && !reported(e)),
     resolved: visible.filter((e) => e.status === 'resolved'),
     securityClause: idKey || securityClause === NO_CHANNEL ? securityClause : NO_KEY,
-    notices: [...notices, ...(suppressed ? [rejectedNotice(suppressed)] : []), ...frozenNotice(idKey, prior.ledger, findings.findings, needles)],
+    notices: [...notices, ...(suppressed ? [rejectedNotice(suppressed)] : []), ...(belowFloor ? [`> ${belowFloor} finding(s) below their class's confidence floor not shown`] : []), ...frozenNotice(idKey, prior.ledger, findings.findings, needles)],
     rawMarker,
     partial: isPartial(s),
   });

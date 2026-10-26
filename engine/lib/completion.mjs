@@ -1,6 +1,9 @@
 // Whether a run produced a completed review, and how publish labels it.
 import { validateFindings } from './render.mjs';
 import { isObject, strings } from './prior.mjs';
+import { activeProject } from './config.mjs';
+
+const CONF = ['low', 'medium', 'high'];
 
 const RATE_RE = /rate.?limit|usage limit/i;
 // Only the tail holds the final result; earlier turns may quote PR code about rate limiting.
@@ -30,7 +33,10 @@ export function completion(state, findingsText, outcome, narrative) {
   if (parsed.value.complete !== true || narrative === null) return { findings: null, reason: 'incomplete', suppressed: 0 };
   const rejected = new Set(strings(state.feedback?.rejectedSlugs));
   const kept = parsed.value.findings.filter((f) => !rejected.has(f.slug) || keepRejected(f));
-  return { findings: { ...parsed.value, findings: kept }, reason: null, suppressed: parsed.value.findings.length - kept.length };
+  // config.classes[].minConfidence: below the floor is not shown (Critical and security always are).
+  const floor = new Map(activeProject().config.classes.filter((k) => k.minConfidence).map((k) => [k.id, CONF.indexOf(k.minConfidence)]));
+  const shown = kept.filter((f) => f.security || f.severity === 'Critical' || !floor.has(f.class) || CONF.indexOf(f.confidence) >= floor.get(f.class));
+  return { findings: { ...parsed.value, findings: shown }, reason: null, suppressed: parsed.value.findings.length - kept.length, belowFloor: kept.length - shown.length };
 }
 
 export const completedFindings = (...args) => completion(...args).findings;

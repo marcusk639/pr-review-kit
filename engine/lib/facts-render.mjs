@@ -50,7 +50,7 @@ function tierSection(tier, driftFiles) {
 function projectSection(project) {
   if (!project?.config) return [];
   const c = project.config;
-  const tag = (k) => [k.security ? 'security' : null, k.always ? 'always' : null].filter(Boolean);
+  const tag = (k) => [k.security ? 'security' : null, k.protected ? 'protected' : null, k.always ? 'always' : null, k.light ? 'light' : null, k.minConfidence ? `report only at ${k.minConfidence} confidence or above` : null].filter(Boolean);
   const classes = c.classes.map((k) => `${k.id}: ${k.name}${tag(k).length ? ` (${tag(k).join(', ')})` : ''}`);
   const demoted = [...(project.demotedClasses ?? [])].sort((a, b) => a - b);
   return [

@@ -50,6 +50,7 @@ function within(path, allowed) {
 function narrowsSecurity(c, rule, config) {
   if (securityClasses(config).has(c.scope.class)) return `class ${c.scope.class} is a security class`;
   if (c.security) return 'the feedback was on a security finding';
+  if (config.classes.some((k) => k.id === c.scope.class && k.protected)) return `class ${c.scope.class} is protected`;
   if (SUPPRESS_SECURITY.test(rule) || SUPPRESS_SECURITY.test(c.text ?? '')) return 'the rule would suppress security, auth, secret or PII findings';
   return null;
 }
