@@ -17,9 +17,9 @@ import { computeIncrement } from './lib/increment.mjs';
 import { writeMaterial } from './lib/material.mjs';
 import { SUMMARY_MARKER } from './lib/markers.mjs';
 import { runPaths } from './lib/paths.mjs';
-import { PROJECT_SUBDIR, activeProject, loadProject, setActiveProject } from './lib/config.mjs';
+import { PROJECT_SUBDIR, activeProject, setActiveProject } from './lib/config.mjs';
+import { loadReviewProject } from './lib/project.mjs';
 import { loadProjectChecks, runProjectChecks } from './lib/project-checks.mjs';
-import { demotedClasses, readPrecision } from './learn/precision.mjs';
 import { buildFacts } from './lib/facts-render.mjs';
 import { checkSecrets, checkPiiLogs, checkNewFileSize, checkTitleScope, checkSelfEdit, checkEnginePin, runVerifyDiff } from './hygiene.mjs';
 
@@ -129,12 +129,11 @@ function githubDeps(env) {
 export async function prepareProject(baseDir) {
   const dir = join(baseDir, PROJECT_SUBDIR);
   if (!existsSync(join(dir, 'config.json'))) return { project: null, why: 'no .claude/pr-review/config.json on the base branch yet' };
-  const project = loadProject(dir);
+  const project = loadReviewProject(dir);
   if (project.errors.length) return { project: null, why: `invalid project config: ${project.errors.slice(0, 5).join('; ')}` };
   const loaded = await loadProjectChecks(dir, project.config.checks.project);
   project.projectChecks = loaded.checks;
   project.loadErrors = loaded.errors;
-  project.demotedClasses = demotedClasses(readPrecision(dir), project.config);
   return { project };
 }
 

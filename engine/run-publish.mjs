@@ -9,7 +9,8 @@ import { pathToFileURL } from 'node:url';
 import { ghRequest, listIssueComments, listReviewComments, upsertSummary } from './lib/gh.mjs';
 import { runPaths } from './lib/paths.mjs';
 import { stepSummary, warn } from './lib/status.mjs';
-import { PROJECT_SUBDIR, loadProject, setActiveProject } from './lib/config.mjs';
+import { PROJECT_SUBDIR, setActiveProject } from './lib/config.mjs';
+import { loadReviewProject } from './lib/project.mjs';
 import { dryRunDeps } from './lib/dry-run.mjs';
 import { publish } from './publish.mjs';
 import { statusOf } from './lib/summary-post.mjs';
@@ -35,7 +36,7 @@ function readState(path) {
 // opts: { dryRun, write, showPrivate, assumePrivateVerified, findingsPath, summaryPath, inlinePath }
 export async function runPublish(env = process.env, opts = {}) {
   const projectDir = join(resolve(env.PR_REVIEW_PUBLISH || '.review-publish'), PROJECT_SUBDIR);
-  const project = loadProject(projectDir);
+  const project = loadReviewProject(projectDir);
   if (project.errors.length) {
     // No trusted config means no trusted classes or channel: post nothing.
     warn('project config missing or invalid on the base branch; nothing published');
