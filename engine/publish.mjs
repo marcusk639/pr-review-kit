@@ -68,6 +68,12 @@ function untrustedBody(fallback, idKey, linkTypes, notices) {
   return renderSummary({ state: {}, findings: null, narrative: '', outcome: 'failure', reason: 'failed', ledger, rawMarker: fallback?.rawMarker ?? null, notices });
 }
 
+// checks.writeCollaborators: a loud status line, never a login.
+function writersNotice(s) {
+  if (s.writeCollaborators === 'unreadable') return ['> write collaborators could not be listed; others may be able to write to this repository'];
+  return Number.isInteger(s.writeCollaborators) && s.writeCollaborators > 0 ? [`> ${s.writeCollaborators} collaborator(s) other than the allowed ones can write to this repository`] : [];
+}
+
 export const rejectedNotice = (n) => `> ${n} finding(s) a maintainer rejected were not re-raised`;
 
 export const FROZEN_NOTICE = '> ledger frozen for security entries: id key unavailable';
@@ -135,7 +141,7 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     carried: visible.filter((e) => e.status === 'open' && !reported(e)),
     resolved: visible.filter((e) => e.status === 'resolved'),
     securityClause: idKey || securityClause === NO_CHANNEL ? securityClause : NO_KEY,
-    notices: [...notices, ...(suppressed ? [rejectedNotice(suppressed)] : []), ...(belowFloor ? [`> ${belowFloor} finding(s) below their class's confidence floor not shown`] : []), ...frozenNotice(idKey, prior.ledger, findings.findings, needles)],
+    notices: [...notices, ...writersNotice(s), ...(suppressed ? [rejectedNotice(suppressed)] : []), ...(belowFloor ? [`> ${belowFloor} finding(s) below their class's confidence floor not shown`] : []), ...frozenNotice(idKey, prior.ledger, findings.findings, needles)],
     rawMarker,
     partial: isPartial(s),
   });

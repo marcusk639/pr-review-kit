@@ -22,6 +22,7 @@ import { loadReviewProject } from './lib/project.mjs';
 import { loadProjectChecks, runProjectChecks } from './lib/project-checks.mjs';
 import { readAt } from './lib/git-read.mjs';
 import { withheldDenies } from './lib/withheld.mjs';
+import { mergeFromBase, writeCollaborators } from './lib/repo-facts.mjs';
 import { buildFacts } from './lib/facts-render.mjs';
 import { checkSecrets, checkPiiLogs, checkNewFileSize, checkTitleScope, checkSelfEdit, checkEnginePin, runVerifyDiff } from './hygiene.mjs';
 
@@ -128,8 +129,8 @@ function recordMaterial(state, m) {
 
 // PR_REVIEW_OFFLINE (local runs and tests): no GitHub calls, prior state empty.
 function githubDeps(env) {
-  if (env.PR_REVIEW_OFFLINE) return { listIssueComments: async () => [], listReviewComments: async () => [], listReactions: async () => [], pull: async () => null };
-  return { listIssueComments, listReviewComments, listReactions, pull: (repo, pr) => ghRequest('GET', `/repos/${repo}/pulls/${pr}`) };
+  if (env.PR_REVIEW_OFFLINE) return { offline: true, listIssueComments: async () => [], listReviewComments: async () => [], listReactions: async () => [], pull: async () => null };
+  return { listIssueComments, listReviewComments, listReactions, request: ghRequest, pull: (repo, pr) => ghRequest('GET', `/repos/${repo}/pulls/${pr}`) };
 }
 
 // The project from the base checkout, or null (then: tier none, no review).
@@ -196,7 +197,13 @@ async function main() {
     const files = tier === 'full' ? prFiles : inc.incrementDiff;
     const factPaths = [...new Set(files.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
     const checked = tier === 'none' ? [] : runChecks({ files, repoRoot, baseSha: BASE_SHA, headSha: HEAD_SHA, title: PR_TITLE, baseDir, projectChecks: project.projectChecks });
-    const results = [...checked, ...(tier === 'none' ? [] : loadFailures)];
+    const repoChecks = tier === 'none' ? [] : [{ check: 'mergeFromBase', facts: mergeFromBase(BASE_SHA, HEAD_SHA, repoRoot) }];
+    if (!deps.offline) {
+      const wc = await writeCollaborators(REPO, deps.request);
+      state.writeCollaborators = wc.status;
+      if (wc.facts.length) repoChecks.push({ check: 'writeCollaborators', facts: wc.facts });
+    }
+    const results = [...checked, ...repoChecks, ...(tier === 'none' ? [] : loadFailures)];
     let pull = null;
     try {
       pull = await deps.pull(REPO, PR);
