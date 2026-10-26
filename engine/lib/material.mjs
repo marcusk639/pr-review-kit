@@ -5,6 +5,7 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { git, prDiffText } from './diff.mjs';
 import { withholdDiff } from './withheld.mjs';
+import { redactTerms } from './redact.mjs';
 
 export const MAX_DIFF = 1.5 * 1024 * 1024;
 const MAX_COMMITS = 200 * 1024;
@@ -31,12 +32,12 @@ function attempt(fn, what) {
 // records both so publish can label the review partial.
 export function writeMaterial(out, { baseSha, headSha, tier, incrementText = '', cwd }) {
   const pr = attempt(() => prDiffText(baseSha, headSha, cwd) || '[no changes]\n', 'pr diff');
-  writeFileSync(join(out, 'pr.diff'), capText(pr.ok ? withholdDiff(pr.text) : pr.text, MAX_DIFF));
+  writeFileSync(join(out, 'pr.diff'), capText(redactTerms(pr.ok ? withholdDiff(pr.text) : pr.text), MAX_DIFF));
   const log = attempt(() => git(['log', '--no-color', '--format=%h %s', `${baseSha}..${headSha}`], cwd) || '[no commits]\n', 'commit list');
-  writeFileSync(join(out, 'commits.txt'), capText(log.text, MAX_COMMITS));
+  writeFileSync(join(out, 'commits.txt'), capText(redactTerms(log.text), MAX_COMMITS));
   const incPath = join(out, 'increment.diff');
   if (INCREMENT_TIERS.has(tier)) {
-    writeFileSync(incPath, capText(withholdDiff(incrementText) || '[no changes in this PR\'s files since the last reviewed commit]\n', MAX_DIFF));
+    writeFileSync(incPath, capText(redactTerms(withholdDiff(incrementText)) || '[no changes in this PR\'s files since the last reviewed commit]\n', MAX_DIFF));
   } else {
     rmSync(incPath, { force: true });
   }

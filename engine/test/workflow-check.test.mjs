@@ -45,7 +45,7 @@ test('secrets are checked by role, not by name', () => {
   assert.match(errs(wf((s) => s.replace('          action_outcome:', '          claude_code_oauth_token: ${{ secrets.X }}\n          action_outcome:'))), /claude_code_oauth_token may only be passed to the review or learn action/);
   assert.match(errs(wf((s) => s.replace('          claude_code_oauth_token:', '          id_key: ${{ secrets.PR_REVIEW_ID_KEY }}\n          claude_code_oauth_token:'))), /id_key may only be passed to the publish action/);
   assert.match(errs(wf((s) => s.replace('    steps:\n', '    env:\n      X: ${{ secrets.OTHER }}\n    steps:\n'))), /secret OTHER is not mapped to a kit input/);
-  assert.deepEqual(checkWorkflow(wf((s) => s.replace('    steps:\n', '    env:\n      GH: ${{ secrets.GITHUB_TOKEN }}\n    steps:\n')), { kind: 'review', securityChannel: 'advisory' }).errors, []);
+  assert.deepEqual(checkWorkflow(wf((s) => s.replace('    steps:\n', '    env:\n      GH: ${{ secrets.GH_TOKEN }}\n    steps:\n')), { kind: 'review', securityChannel: 'advisory' }).errors, []);
 });
 
 test('trigger, permissions and comments are read the way GitHub reads them', () => {
@@ -74,4 +74,21 @@ test('a kit commit without the sandbox properties is rejected even on main', () 
   assert.match(e, /Skill/);
   writeFileSync(review, orig);
   g('commit', '-qam', 'restore');
+});
+
+test('M4: secret syntaxes that bypass a plain secrets.X match are caught', () => {
+  assert.match(errs(wf((s) => s.replace('    steps:\n', "    env:\n      X: ${{ secrets['OTHER'] }}\n    steps:\n"))), /secret OTHER/);
+  assert.match(errs(wf((s) => s.replace('    steps:\n', '    env:\n      X: ${{ Secrets.OTHER }}\n    steps:\n'))), /secret OTHER/);
+  assert.match(errs(wf((s) => s.replace('    steps:\n', '    env:\n      X: ${{ toJSON(secrets) }}\n    steps:\n'))), /toJSON\(secrets\)/);
+  assert.match(errs(wf((s) => `${s}\n  other:\n    uses: o/r/.github/workflows/x.yml@${'a'.repeat(40)}\n    secrets: inherit\n`)), /secrets: inherit/);
+});
+
+test('M4: only the canonical kit owner counts as a kit action', () => {
+  const fake = wf((s) => s.replace(`marcusk639/pr-review-kit/actions/publish@${SHA}`, `evil/pr-review-kit/actions/publish@${SHA}`));
+  assert.match(errs(fake), /does not use pr-review-kit\/actions\/publish/);
+});
+
+test('M4: review guards must sit in the job condition, not anywhere in the file', () => {
+  const moved = wf((s) => s.replace('\n      && github.event.pull_request.head.repo.full_name == github.repository', '').replace('    steps:\n', '    env:\n      NOTE: "github.event.pull_request.head.repo.full_name == github.repository"\n    steps:\n'));
+  assert.match(errs(moved), /same-repo guard/);
 });

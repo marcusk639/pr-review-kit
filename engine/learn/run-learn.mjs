@@ -154,7 +154,7 @@ async function main(cmd, env = process.env) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main(process.argv[2]).catch((err) => {
     // Status only: never bodies or tokens.
-    console.log(`::warning::pr-review learning failed (${Number.isInteger(err?.status) ? err.status : err?.message?.slice(0, 80) ?? 'error'})`);
+    console.log(`::warning::pr-review learning failed (${Number.isInteger(err?.status) ? err.status : redact(String(err?.message ?? 'error')).slice(0, 80)})`);
     process.exitCode = 1;
   });
 }

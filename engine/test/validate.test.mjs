@@ -121,3 +121,10 @@ test('a forbidden glob that matches no knowledge file is a warning', () => {
   const dir = repo(({ sub }) => sub('.pr-review/config.json', '"distill": "model"', '"distill": "model", "forbidden": ["maps/**"]'));
   assert.match(validateRepo(dir, { kitDir: false }).warnings.join(), /learning\.forbidden maps\/\*\* matches no knowledge file/);
 });
+
+test('M4: learning workflow permissions and triggers in every form', () => {
+  assert.match(errorsOf(repo(({ sub }) => sub(LWF, 'concurrency:', 'permissions: write-all\n\nconcurrency:'))), /write-all/);
+  assert.match(errorsOf(repo(({ sub }) => sub(LWF, 'concurrency:', 'permissions:\n  contents: write\n\nconcurrency:'))), /workflow-level write permission/);
+  assert.match(errorsOf(repo(({ sub }) => sub(LWF, '    permissions:\n      contents: read\n      pull-requests: read\n      issues: read\n      id-token: write', '    permissions: { contents: write, id-token: write }'))), /learn job must not have write permissions/);
+  assert.match(errorsOf(repo(({ sub }) => sub(LWF, '  workflow_dispatch:', '  workflow_dispatch:\n  push:'))), /schedule and workflow_dispatch only/);
+});

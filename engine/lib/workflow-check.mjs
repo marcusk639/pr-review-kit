@@ -34,7 +34,9 @@ export function stepsOf(yml) {
   return out;
 }
 
-export const kitAction = (step) => /uses:\s*[\w.-]+\/pr-review-kit\/actions\/([\w-]+)@/.exec(step)?.[1] ?? null;
+// Only the canonical kit, as the step's own uses: key.
+export const KIT_OWNER = 'marcusk639';
+export const kitAction = (step) => new RegExp(`^\\s*(?:- )?uses:\\s*['"]?${KIT_OWNER}/pr-review-kit/actions/([\\w-]+)@`, 'm').exec(step)?.[1] ?? null;
 
 function checkUses(text, errors) {
   for (const m of text.matchAll(/uses:\s*['"]?([^\s'"]+)/g)) {
@@ -48,17 +50,20 @@ function checkUses(text, errors) {
   return pins[0] ?? null;
 }
 
-const SECRET = /secrets\.([A-Za-z_][A-Za-z0-9_]*)/g;
+// secrets.X, secrets['X'], secrets["X"], any case (GitHub expressions are case-insensitive).
+const SECRET = /secrets(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*\])/gi;
 const NOT_MAPPED = (name) => `secret ${name} is not mapped to a kit input (only claude_code_oauth_token, id_key, advisory_token, private_issue_token, redact_terms)`;
 
 function checkSecrets(text, steps, errors) {
-  const names = (t) => [...t.matchAll(SECRET)].map((m) => m[1]).filter((n) => n !== 'GITHUB_TOKEN');
+  if (/toJSON\s*\(\s*secrets\s*\)/i.test(text)) errors.push('toJSON(secrets) exposes every secret; map each one to its kit input');
+  if (/^\s*secrets:\s*inherit\s*$/im.test(text)) errors.push('secrets: inherit passes every secret; map each one to its kit input');
+  const names = (t) => [...t.matchAll(SECRET)].map((m) => m[1] ?? m[2]).filter((n) => n.toUpperCase() !== 'GH_TOKEN');
   const outside = names(text);
   for (const step of steps) {
     for (const line of step.split('\n')) {
       for (const name of names(line)) {
         outside.splice(outside.indexOf(name), 1);
-        const key = new RegExp(`^\\s*([\\w-]+):\\s*\\$\\{\\{\\s*secrets\\.${name}\\s*\\}\\}\\s*$`).exec(line)?.[1];
+        const key = new RegExp(`^\\s*([\\w-]+):\\s*\\$\\{\\{\\s*secrets\\.${name}\\s*\\}\\}\\s*$`, 'i').exec(line)?.[1];
         const role = key ? ROLES[key] : null;
         if (!role || !kitAction(step)) errors.push(NOT_MAPPED(name));
         else if (!role.actions.includes(kitAction(step))) errors.push(`${key} may only be passed to ${role.what}`);
@@ -68,13 +73,24 @@ function checkSecrets(text, steps, errors) {
   for (const name of outside) errors.push(NOT_MAPPED(name));
 }
 
+// The job-level if: of the job that uses the review action (its folded text up to runs-on).
+function jobCondition(text) {
+  const at = text.search(/pr-review-kit\/actions\/review@/);
+  const before = text.slice(0, at < 0 ? text.length : at);
+  const i = before.lastIndexOf('\n    if:');
+  if (i < 0) return '';
+  const end = before.indexOf('\n    runs-on:', i);
+  return before.slice(i, end < 0 ? undefined : end);
+}
+
 function checkReviewShape(text, steps, { securityChannel }, errors, warnings) {
+  const cond = jobCondition(text);
   if (/pull_request_target/.test(text)) errors.push('the review workflow must not use pull_request_target (secrets would reach every PR event)');
   if (!/^\s{2}pull_request:/m.test(text) && !/^on:\s*\[?[^\n]*\bpull_request\b/m.test(text)) errors.push('the review workflow must trigger on pull_request');
-  if (!text.includes('github.event.pull_request.head.repo.full_name == github.repository')) errors.push('the job needs the same-repo guard (forks get no secrets)');
-  if (!text.includes('!github.event.pull_request.draft')) errors.push('the job must skip draft PRs');
-  if (/types:\s*\[[^\]]*\bclosed\b/.test(text) && !/github\.event\.action != 'closed' \|\| github\.event\.pull_request\.merged/.test(text)) errors.push("closed PRs need the merged guard: (github.event.action != 'closed' || github.event.pull_request.merged)");
-  if (!text.includes("github.actor != 'dependabot[bot]'")) warnings.push('the job does not skip Dependabot (its runs get no secrets)');
+  if (!cond.includes('github.event.pull_request.head.repo.full_name == github.repository')) errors.push('the job needs the same-repo guard (forks get no secrets) in its if:');
+  if (!cond.includes('!github.event.pull_request.draft')) errors.push('the job must skip draft PRs in its if:');
+  if (/types:\s*\[[^\]]*\bclosed\b/.test(text) && !/github\.event\.action != 'closed' \|\| github\.event\.pull_request\.merged/.test(cond)) errors.push("closed PRs need the merged guard: (github.event.action != 'closed' || github.event.pull_request.merged)");
+  if (!cond.includes("github.actor != 'dependabot[bot]'")) warnings.push('the job does not skip Dependabot (its runs get no secrets)');
   if (/write-all/.test(text)) errors.push('permissions: write-all is not allowed');
   if (/^\s+contents:\s*write\s*$/m.test(text)) errors.push('the review workflow must not grant contents: write');
   if (!/^\s+pull-requests:\s*write\s*$/m.test(text)) errors.push('permissions need pull-requests: write (to post)');
@@ -136,6 +152,9 @@ export function checkKitPin(sha, kitDir) {
     ['"disableAllHooks": true', 'hooks must be disabled for the review model'],
   ];
   for (const [needle, msg] of required) if (!review.includes(needle)) errors.push(`kit ${sha.slice(0, 7)}: ${msg}`);
+  const learn = show('actions/learn/action.yml');
+  for (const [needle, msg] of [['--setting-sources user', 'the distill model must run with --setting-sources user'], [',Skill,', 'the distill model must be denied the Skill tool'], ['- name: Default branch only', 'the learn action must refuse non-default branches']]) if (!learn.includes(needle)) errors.push(`kit ${sha.slice(0, 7)}: ${msg}`);
+  if (!show('actions/propose/action.yml').includes('- name: Default branch only')) errors.push(`kit ${sha.slice(0, 7)}: the propose action must refuse non-default branches`);
   for (const a of ['review', 'publish', 'learn', 'propose']) {
     const yml = show(`actions/${a}/action.yml`);
     for (const m of yml.matchAll(/uses:\s*([^\s#]+)/g)) if (!SHA_RE.test(m[1].split('@')[1] ?? '')) errors.push(`kit ${sha.slice(0, 7)}: actions/${a} uses ${m[1]} unpinned`);

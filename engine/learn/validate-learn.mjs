@@ -23,12 +23,29 @@ export function validateLearnWorkflow(root, project, { errors }) {
   const review = existsSync(join(root, project.config.workflowPath)) ? readFileSync(join(root, project.config.workflowPath), 'utf8') : '';
   const reviewSha = /pr-review-kit\/actions\/review@(\S+)/.exec(review)?.[1];
   if (sha && reviewSha && sha !== reviewSha) errors.push('the learning workflow must pin the same kit SHA as the review workflow');
-  if (/pull_request/.test(wf)) errors.push('the learning workflow must not run on pull_request events (memory changes land only through its own PR)');
+  // Line-based (no backtracking regex): the block under a top-level key.
+  const block = (key) => {
+    const lines = wf.split('\n');
+    const at = lines.findIndex((l) => l.startsWith(`${key}:`));
+    if (at < 0) return { inline: '', body: [] };
+    const body = [];
+    for (const l of lines.slice(at + 1)) {
+      if (l.trim() && !/^\s/.test(l)) break;
+      body.push(l);
+    }
+    return { inline: lines[at].slice(key.length + 1).trim(), body };
+  };
+  const on = block('on');
+  const triggers = on.inline ? on.inline.replace(/[[\]]/g, '').split(',').map((t) => t.trim()).filter(Boolean) : on.body.map((l) => /^ {2}([\w-]+):/.exec(l)?.[1]).filter(Boolean);
+  if (!triggers.length || triggers.some((t) => !['schedule', 'workflow_dispatch'].includes(t))) errors.push('the learning workflow must trigger on schedule and workflow_dispatch only');
+  if (/write-all/.test(wf)) errors.push('learning workflow: permissions: write-all is not allowed');
+  const perms = block('permissions');
+  if (/write/.test(perms.inline) || perms.body.some((l) => /write/.test(l))) errors.push('learning workflow: no workflow-level write permission (grant contents/pull-requests write to the propose job only)');
   for (const step of r.steps.filter((x) => /uses:\s*actions\/checkout@/.test(x))) {
     if (!/ref:\s*\$\{\{\s*github\.event\.repository\.default_branch\s*\}\}/.test(step)) errors.push('learning workflow: every checkout needs ref: ${{ github.event.repository.default_branch }}');
   }
   for (const job of jobsOf(wf)) {
-    if (/pr-review-kit\/actions\/learn@/.test(job) && /^\s+[\w-]+: write\s*$/m.test(job.replace(/^\s+id-token: write\s*$/m, ''))) errors.push('the learn job must not have write permissions (it runs the model)');
+    if (/pr-review-kit\/actions\/learn@/.test(job) && /\b(?!id-token)[\w-]+:\s*write\b/.test(job.replace(/id-token:\s*write/g, ''))) errors.push('the learn job must not have write permissions (it runs the model)');
     if (/pr-review-kit\/actions\/propose@/.test(job) && /secrets\./.test(job)) errors.push('the propose job must not receive secrets');
     if (/pr-review-kit\/actions\/propose@/.test(job) && /claude-code-action|actions\/learn@/.test(job)) errors.push('the propose job must not run a model');
   }

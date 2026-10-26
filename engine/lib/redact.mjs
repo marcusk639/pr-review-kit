@@ -57,6 +57,15 @@ export function terms(env = process.env) {
 }
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// Only the redaction terms (no secret patterns): for the model's own material
+// (pr.diff, increment.diff, commits.txt, state.json). Terms under 3
+// characters are ignored everywhere.
+export function redactTerms(text) {
+  let out = String(text ?? '');
+  for (const t of terms()) out = out.replace(new RegExp(escapeRe(t), 'gi'), '[redacted]');
+  return out;
+}
+
 export function redact(text) {
   let out = String(text ?? '');
   for (const t of terms()) out = out.replace(new RegExp(escapeRe(t), 'gi'), '[redacted]');

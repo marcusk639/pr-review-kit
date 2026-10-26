@@ -9,7 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { git, prDiff } from './lib/diff.mjs';
 import { route } from './lib/routing.mjs';
-import { redact } from './lib/redact.mjs';
+import { redact, redactTerms } from './lib/redact.mjs';
 import { ghRequest, listIssueComments, listReactions, listReviewComments } from './lib/gh.mjs';
 import { loadState } from './lib/state.mjs';
 import { classify, maxTurnsFor } from './lib/tier.mjs';
@@ -107,7 +107,7 @@ export function unavailableChecks(results) {
 function writeOutputs({ out, stateFile }, text, state) {
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'facts.md'), redact(text));
-  writeFileSync(join(out, 'state.json'), JSON.stringify(state, null, 2));
+  writeFileSync(join(out, 'state.json'), redactTerms(JSON.stringify(state, null, 2)));
   // The kit's generic procedure, from the pinned engine (the model reads it from OUT).
   copyFileSync(join(ENGINE_DIR, 'REVIEW.md'), join(out, 'REVIEW.md'));
   try {

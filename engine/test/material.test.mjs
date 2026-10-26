@@ -103,3 +103,15 @@ test('gatherContext keeps only OWNER/MEMBER/COLLABORATOR comments and body', asy
   assert.ok(!strangerPr.includes('evil body'));
   assert.match(strangerPr, /PR description withheld/);
 });
+
+test('redaction terms never reach the model material', async () => {
+  process.env.PR_REVIEW_REDACT_TERMS = 'second change\nexport const b';
+  try {
+    const out2 = mkdtempSync(join(tmpdir(), 'mat-terms-'));
+    writeMaterial(out2, { baseSha: S.base, headSha: S.p2, tier: 'full', cwd: root });
+    assert.doesNotMatch(readFileSync(join(out2, 'commits.txt'), 'utf8'), /second change/i);
+    assert.doesNotMatch(readFileSync(join(out2, 'pr.diff'), 'utf8'), /export const b/i);
+  } finally {
+    delete process.env.PR_REVIEW_REDACT_TERMS;
+  }
+});
