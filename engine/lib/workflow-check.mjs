@@ -10,6 +10,7 @@ const ROLES = {
   id_key: { actions: ['publish'], what: 'the publish action' },
   advisory_token: { actions: ['publish'], what: 'the publish action' },
   private_issue_token: { actions: ['publish'], what: 'the publish action' },
+  redact_terms: { actions: ['review', 'publish', 'learn'], what: 'the review, publish or learn action' },
 };
 
 export const stripComments = (yml) => String(yml ?? '').split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
@@ -48,7 +49,7 @@ function checkUses(text, errors) {
 }
 
 const SECRET = /secrets\.([A-Za-z_][A-Za-z0-9_]*)/g;
-const NOT_MAPPED = (name) => `secret ${name} is not mapped to a kit input (only claude_code_oauth_token, id_key, advisory_token, private_issue_token)`;
+const NOT_MAPPED = (name) => `secret ${name} is not mapped to a kit input (only claude_code_oauth_token, id_key, advisory_token, private_issue_token, redact_terms)`;
 
 function checkSecrets(text, steps, errors) {
   const names = (t) => [...t.matchAll(SECRET)].map((m) => m[1]).filter((n) => n !== 'GITHUB_TOKEN');

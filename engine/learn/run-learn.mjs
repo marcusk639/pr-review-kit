@@ -18,6 +18,7 @@ import { applyProposals, deterministicProposals } from './apply.mjs';
 import { mergePrecision, readPrecision, renderPrecision } from './precision.mjs';
 import { renderKnowledge, renderPrBody } from './render.mjs';
 import { runLearnCommands } from './commands.mjs';
+import { redact } from '../lib/redact.mjs';
 
 const ENGINE = dirname(dirname(fileURLToPath(import.meta.url)));
 const json = (v) => `${JSON.stringify(v, null, 2)}\n`;
@@ -90,11 +91,11 @@ export function finishLearn({ project, root, out, snapshot, files, today, distil
   rmSync(bundle, { recursive: true, force: true });
   for (const p of changed) {
     mkdirSync(dirname(join(bundle, p)), { recursive: true });
-    writeFileSync(join(bundle, p), proposed[p][0]);
+    writeFileSync(join(bundle, p), redact(proposed[p][0]));
   }
   const manifest = { hasChanges: changed.length > 0, files: changed, commands: cmd.results.map(({ kind, ok }) => ({ kind, ok })), lessons: { added: result.added.length, replaced: result.replaced.length, pruned: result.pruned.length, flagged: result.flagged.length } };
   mkdirSync(bundle, { recursive: true });
-  writeFileSync(join(bundle, 'pr-body.md'), body);
+  writeFileSync(join(bundle, 'pr-body.md'), redact(body));
   writeFileSync(join(bundle, 'manifest.json'), json(manifest));
   return { manifest, body, root };
 }

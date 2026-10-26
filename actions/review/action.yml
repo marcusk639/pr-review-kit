@@ -12,6 +12,10 @@ inputs:
   claude_code_oauth_token:
     description: Claude subscription token (map any secret name to it). Reaches only the claude-code-action step.
     required: true
+  redact_terms:
+    description: Optional secret, newline-separated literals removed from facts.md (and so from anything derived from it). Never given to the model.
+    required: false
+    default: ""
   model:
     description: Model alias passed to Claude Code.
     required: false
@@ -77,6 +81,7 @@ runs:
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         PR_TITLE: ${{ github.event.pull_request.title }}
         PR_REVIEW_BASE: .review-base
+        PR_REVIEW_REDACT_TERMS: ${{ inputs.redact_terms }}
       run: node "${{ steps.paths.outputs.kit_root }}/engine/facts.mjs"
 
     # The model reads .pr-review/ from the working tree: replace the PR head's

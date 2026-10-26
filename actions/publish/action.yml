@@ -34,6 +34,10 @@ inputs:
     description: securityChannel private-repo-issue. Fine-grained PAT with Issues read/write on the inbox repo only.
     required: false
     default: ""
+  redact_terms:
+    description: Optional secret, newline-separated literals removed from everything posted.
+    required: false
+    default: ""
   dry_run:
     description: "true: print what would be posted instead of posting."
     required: false
@@ -73,6 +77,7 @@ runs:
         ADVISORY_TOKEN: ${{ inputs.advisory_token }}
         PR_REVIEW_PRIVATE_REPO: ${{ inputs.private_repo }}
         PRIVATE_ISSUE_TOKEN: ${{ inputs.private_issue_token }}
+        PR_REVIEW_REDACT_TERMS: ${{ inputs.redact_terms }}
         # Step env overrides GITHUB_ENV: nothing an earlier step exported can
         # preload code into this secret-bearing node process (NODE_OPTIONS)
         # or into the bash shell that launches it (BASH_ENV).

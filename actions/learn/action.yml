@@ -14,6 +14,10 @@ inputs:
     description: Model alias passed to Claude Code.
     required: false
     default: opus
+  redact_terms:
+    description: Optional secret, newline-separated literals removed from the candidates and everything proposed.
+    required: false
+    default: ""
   max_turns:
     description: Turn cap for the distill step.
     required: false
@@ -43,6 +47,7 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         REPO: ${{ github.repository }}
+        PR_REVIEW_REDACT_TERMS: ${{ inputs.redact_terms }}
       run: node "${{ steps.paths.outputs.kit_root }}/engine/learn/run-learn.mjs" collect
 
     # Same sandbox as the review model: no Bash, network, MCP or posting tool;
@@ -71,6 +76,7 @@ runs:
       env:
         NODE_OPTIONS: ""
         BASH_ENV: ""
+        PR_REVIEW_REDACT_TERMS: ${{ inputs.redact_terms }}
       run: node --no-warnings "${{ steps.paths.outputs.kit_root }}/engine/learn/run-learn.mjs" apply
 
     - name: Upload proposal

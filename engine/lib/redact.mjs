@@ -43,8 +43,20 @@ export function secretPatterns(config = activeProject().config) {
   return cached.list;
 }
 
+// PR_REVIEW_REDACT_TERMS (newline-separated, from a secret): literal terms such
+// as a tenant name that must never appear in posted or committed text. Set only
+// in the facts, publish and learn steps; never in config, never to the model.
+function terms(env = process.env) {
+  return String(env.PR_REVIEW_REDACT_TERMS ?? '')
+    .split('\n')
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3);
+}
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export function redact(text) {
   let out = String(text ?? '');
+  for (const t of terms()) out = out.replace(new RegExp(escapeRe(t), 'gi'), '[redacted]');
   for (const re of secretPatterns()) out = out.replace(new RegExp(re.source, 'g'), (m) => m.slice(0, 6) + '…');
   return out;
 }

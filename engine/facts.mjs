@@ -98,7 +98,7 @@ export function unavailableChecks(results) {
 // trusts only this one, since the model can Write OUT/state.json.
 function writeOutputs({ out, stateFile }, text, state) {
   mkdirSync(out, { recursive: true });
-  writeFileSync(join(out, 'facts.md'), text);
+  writeFileSync(join(out, 'facts.md'), redact(text));
   writeFileSync(join(out, 'state.json'), JSON.stringify(state, null, 2));
   // The kit's generic procedure, from the pinned engine (the model reads it from OUT).
   copyFileSync(join(ENGINE_DIR, 'REVIEW.md'), join(out, 'REVIEW.md'));

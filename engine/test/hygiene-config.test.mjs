@@ -82,3 +82,13 @@ test('new-file size never reads through a symlinked file or directory', async ()
   mkdirSync(join(root, 'real'));
   assert.deepEqual(checkNewFileSize([file({ file: 'link.ts', status: 'A' }), file({ file: 'dir/big.ts', status: 'A' })], root), []);
 });
+
+test('redaction terms from the environment are removed case-insensitively and never kept in config', () => {
+  process.env.PR_REVIEW_REDACT_TERMS = 'AcmeTenant\n  \nx\nsecret-co';
+  try {
+    assert.equal(redact('tenant acmetenant and Secret-Co here; x stays'), 'tenant [redacted] and [redacted] here; x stays');
+  } finally {
+    delete process.env.PR_REVIEW_REDACT_TERMS;
+  }
+  assert.equal(redact('acmetenant'), 'acmetenant');
+});
