@@ -1,0 +1,108 @@
+name: pr-review-kit review
+description: >-
+  Facts (model-free) and the sandboxed review model. The engine runs from this
+  action's pinned commit; the project's config, knowledge and checks come from
+  a fresh base-branch checkout. Needs the PR head checked out in the workspace
+  (fetch-depth 0, persist-credentials false). The model has no Bash, network,
+  MCP or posting tool and writes only under OUT; the publish action posts.
+inputs:
+  claude_code_oauth_token:
+    description: Claude subscription token. Reaches only the claude-code-action step.
+    required: true
+  model:
+    description: Model alias passed to Claude Code.
+    required: false
+    default: opus
+outputs:
+  tier:
+    description: The run's tier (none means the model did not run).
+    value: ${{ steps.facts.outputs.tier }}
+  outcome:
+    description: The review step's outcome (success, failure, skipped), for publish.
+    value: ${{ steps.review.outcome }}
+  execution_file:
+    description: The review step's execution log, for publish's rate-limit detection.
+    value: ${{ steps.review.outputs.execution_file }}
+runs:
+  using: composite
+  steps:
+    # GITHUB_ENV carries these to every later step, publish included. STATE_FILE
+    # is the trusted copy of state.json, outside the model's --add-dir.
+    # RUN_STARTED_AT is taken before anything the model can trigger: the inline
+    # guard treats only bot review comments created from here on as this run's.
+    - name: Run start
+      id: paths
+      shell: bash
+      run: |
+        echo "RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+        echo "OUT=$RUNNER_TEMP/pr-review" >> "$GITHUB_ENV"
+        echo "STATE_FILE=$RUNNER_TEMP/prstate-snapshot/state.json" >> "$GITHUB_ENV"
+        echo "kit_root=$(cd "${{ github.action_path }}/../.." && pwd)" >> "$GITHUB_OUTPUT"
+
+    # The PR head could ship its own .review-base/; never reuse it.
+    - name: Clear base checkout path
+      shell: bash
+      run: rm -rf .review-base
+
+    - name: Checkout base (project config, knowledge and checks)
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.base.sha }}
+        path: .review-base
+        fetch-depth: 1
+        persist-credentials: false
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+
+    - name: Facts
+      id: facts
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        PR_REVIEW_BASE: .review-base
+      run: node "${{ steps.paths.outputs.kit_root }}/engine/facts.mjs"
+
+    # The model reads the knowledge files from the working tree, so replace the
+    # PR head's copy with the base branch's: a PR must not edit the rules it is
+    # judged by. The model reviews such an edit from OUT/pr.diff.
+    - name: Restore reviewer knowledge from base
+      shell: bash
+      run: |
+        rm -rf .claude-pr
+        if [ -d .review-base/.claude/pr-review ]; then
+          if [ -L .claude ]; then rm .claude; fi
+          mkdir -p .claude
+          rm -rf .claude/pr-review
+          cp -R .review-base/.claude/pr-review .claude/pr-review
+        fi
+
+    # No shell for the model: facts wrote the diff, commit list and procedure
+    # into OUT. Write/Edit are allowed only under OUT and denied in the
+    # workspace, on this kit's own files, on the runner's command files (which
+    # would reach the publish step) and on the state snapshot. Reads of the
+    # workspace .git/ (the action writes its token into .git/config) and of
+    # //proc/** are denied. No inline-comment tool: publish posts inline.json.
+    - name: Review
+      id: review
+      if: steps.facts.outputs.tier != 'none'
+      continue-on-error: true
+      uses: anthropics/claude-code-action@v1
+      with:
+        claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
+        settings: '{"disableAllHooks": true}'
+        prompt: |
+          Follow ${{ runner.temp }}/pr-review/REVIEW.md, then the project addendum .claude/pr-review/REVIEW.md. OUT=${{ runner.temp }}/pr-review. Base ${{ github.event.pull_request.base.sha }}, head ${{ github.event.pull_request.head.sha }}. Ignore the .review-base/ and .review-publish/ directories.
+        claude_args: >-
+          --model ${{ inputs.model }}
+          --max-turns ${{ steps.facts.outputs.max_turns || 10 }}
+          --strict-mcp-config
+          --add-dir ${{ runner.temp }}/pr-review
+          --allowedTools "Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)"
+          --disallowedTools "Bash,MultiEdit,NotebookEdit,WebFetch,WebSearch,mcp__github_inline_comment__create_inline_comment,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Write(/${{ steps.paths.outputs.kit_root }}/**),Edit(/${{ steps.paths.outputs.kit_root }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/prstate-snapshot/**),Edit(/${{ runner.temp }}/prstate-snapshot/**)"

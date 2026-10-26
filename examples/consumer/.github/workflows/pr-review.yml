@@ -1,0 +1,53 @@
+# Repo-aware, advisory PR review (pr-review-kit). Comments only: never approves,
+# never blocks, never a required check. Replace KIT_SHA with the kit's full
+# 40-character commit SHA, the same in both `uses:` lines; a tag or branch would
+# let the engine change under the pin.
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Skip drafts, forks (their runs get no secrets) and Dependabot (likewise).
+    if: >-
+      ${{ !github.event.pull_request.draft
+      && github.actor != 'dependabot[bot]'
+      && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Facts, then the sandboxed model. Gets the Claude token and nothing else.
+      - name: Review
+        id: review
+        uses: marcusk639/pr-review-kit/actions/review@KIT_SHA
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      # Model-free; the only step with the id key and the advisory token.
+      # Private repos using securityChannel repo-comments or none omit both.
+      - name: Publish
+        if: always()
+        uses: marcusk639/pr-review-kit/actions/publish@KIT_SHA
+        with:
+          action_outcome: ${{ steps.review.outputs.outcome }}
+          execution_file: ${{ steps.review.outputs.execution_file }}
+          id_key: ${{ secrets.PR_REVIEW_ID_KEY }}
+          advisory_token: ${{ secrets.SECURITY_ADVISORY_TOKEN }}

@@ -1,0 +1,73 @@
+name: pr-review-kit publish
+description: >-
+  Model-free publish: inline comments, the private security channel and the
+  one summary comment. Runs this action's pinned engine with the project config
+  from a fresh base checkout. The only step that sees the id key and the
+  advisory token. Use with if: always() after the review action.
+inputs:
+  action_outcome:
+    description: The review action's outcome output.
+    required: false
+    default: ""
+  execution_file:
+    description: The review action's execution_file output.
+    required: false
+    default: ""
+  id_key:
+    description: PR_REVIEW_ID_KEY (HMAC key for opaque ledger ids). Public repos.
+    required: false
+    default: ""
+  advisory_token:
+    description: Fine-grained PAT with "Repository security advisories - read and write" on this repo. Public repos.
+    required: false
+    default: ""
+  dry_run:
+    description: "true: print what would be posted instead of posting."
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    # Fresh every time: whatever exists at this path now (a planted .git, a
+    # symlink) must not be reused by the secret-bearing publish step.
+    - name: Clear publish checkout path
+      shell: bash
+      run: rm -rf .review-publish
+
+    - name: Checkout base (project config, untouched by the model)
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.base.sha }}
+        path: .review-publish
+        fetch-depth: 1
+        persist-credentials: false
+
+    - name: Publish
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        ACTION_OUTCOME: ${{ inputs.action_outcome }}
+        EXECUTION_FILE: ${{ inputs.execution_file }}
+        PR_REVIEW_PUBLISH: .review-publish
+        PR_REVIEW_DRY_RUN: ${{ inputs.dry_run == 'true' && '1' || '' }}
+        # Publish only: keys the ledger's opaque ids. Never given to facts or the model.
+        PR_REVIEW_ID_KEY: ${{ inputs.id_key }}
+        # Publish only: draft advisories. Never given to the model or comments.
+        ADVISORY_TOKEN: ${{ inputs.advisory_token }}
+        # Step env overrides GITHUB_ENV: nothing an earlier step exported can
+        # preload code into this secret-bearing node process (NODE_OPTIONS)
+        # or into the bash shell that launches it (BASH_ENV).
+        NODE_OPTIONS: ""
+        BASH_ENV: ""
+      run: node --no-warnings "${{ github.action_path }}/../../engine/run-publish.mjs"
+
+    - name: Cleanup
+      if: always()
+      shell: bash
+      run: |
+        chmod -R u+w "${{ runner.temp }}/prstate-snapshot" 2>/dev/null || true
+        rm -rf "${{ runner.temp }}/pr-review" "${{ runner.temp }}/prstate-snapshot"
