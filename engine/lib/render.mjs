@@ -7,6 +7,7 @@ import { SEVERITIES, fitMarker, visibleEntries } from './ledger.mjs';
 import { validateFindings, securityPointer } from './findings.mjs';
 import { securityNeedles, mentions, touchesSecurityFile } from './needles.mjs';
 import { handleOf } from './feedback.mjs';
+import { activeProject } from './config.mjs';
 
 export { validateFindings, securityPointer };
 
@@ -49,7 +50,7 @@ function renderFinding(f, needles, isNew, clause) {
 }
 
 function renderPriorEntry(e) {
-  if (e.security) return `- Security-relevant issue (${e.severity}) reported earlier; details sent privately`;
+  if (e.security) return `- Security-relevant issue (${e.severity}) reported earlier; ${activeProject().config.securityChannel === 'advisory' ? 'details sent privately' : 'details not shown here'}`;
   if (e.withheld) return `- **${WITHHELD_TITLE}** (${e.severity}, from an earlier review)`;
   return `- **${clean(e.title || e.slug, 200)}** (${e.severity}, from an earlier review) · \`${handleOf(e.slug)}\``;
 }

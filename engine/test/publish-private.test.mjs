@@ -92,3 +92,13 @@ test('channel none never shows detail and never tries an advisory', async () => 
   assert.doesNotMatch(summary, /Token check skipped/);
   assert.equal(delivered, 0);
 });
+
+test('an earlier security entry does not claim private delivery on a channel that has none', async () => {
+  const { renderSummary } = await import('../lib/render.mjs');
+  setActiveProject(project({ visibility: 'private', securityChannel: 'none' }));
+  const ledger = { lastReviewedSha: null, lastBaseSha: null, linkTypesSeen: [], ledger: [{ id: '0123456789abcdef', severity: 'High', status: 'open', security: true, runsSinceResolved: 0, fileIds: [] }] };
+  const body = renderSummary({ state: { tier: 'full' }, findings: null, narrative: '', outcome: 'failure', ledger });
+  assert.match(body, /Security-relevant issue \(High\) reported earlier; details not shown here/);
+  setActiveProject(RP);
+  assert.match(renderSummary({ state: { tier: 'full' }, findings: null, narrative: '', outcome: 'failure', ledger }), /reported earlier; details sent privately/);
+});
