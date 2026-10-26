@@ -5,6 +5,10 @@
 //     Facts against the local repo (offline: no GitHub, no prior state), with
 //     the project read from the base commit (or --project, a working copy of
 //     .claude/pr-review), then publish in dry-run mode.
+//   learn --repo <owner/name>
+//     The learning job without the model or the PR: collects trusted feedback
+//     from GitHub (read-only; needs GH_TOKEN), applies it and prints the
+//     learning PR body. Writes nothing to the repo or GitHub.
 //   validate [--workflow <path>]
 //     Checks .claude/pr-review/ and the review workflow (see engine/validate.mjs).
 import { execFileSync } from 'node:child_process';
@@ -84,10 +88,21 @@ async function local(o) {
   process.stdout.write(`\n(local run: tier ${tier}, outcome ${outcome}; material in ${tmp})\n`);
 }
 
+function learn(o) {
+  if (!o.repo || !process.env.GH_TOKEN) throw new Error('learn needs --repo <owner/name> and GH_TOKEN (e.g. GH_TOKEN=$(gh auth token))');
+  const tmp = mkdtempSync(join(tmpdir(), 'pr-review-learn-'));
+  const env = { ...process.env, REPO: o.repo, OUT: join(tmp, 'out'), LEARN_STATE: join(tmp, 'snapshot', 'learn.json'), PR_REVIEW_DRY_RUN: '1', GITHUB_OUTPUT: '' };
+  const run = (cmd) => process.stdout.write(execFileSync('node', [join(ENGINE, 'learn/run-learn.mjs'), cmd], { cwd: process.cwd(), env, encoding: 'utf8' }));
+  run('collect');
+  run('apply');
+  process.stdout.write(`\n(proposed files in ${join(tmp, 'out', 'bundle')})\n`);
+}
+
 async function main() {
   const o = args(process.argv.slice(2));
   const cmd = o._[0];
   if (cmd === 'local') return local(o);
+  if (cmd === 'learn') return learn(o);
   if (cmd === 'validate') {
     const { errors, warnings } = validateRepo(process.cwd(), { workflow: o.workflow });
     for (const w of warnings) process.stdout.write(`warning: ${w}\n`);
@@ -96,7 +111,7 @@ async function main() {
     process.exitCode = errors.length ? 1 : 0;
     return;
   }
-  process.stdout.write('usage: pr-review.mjs local --base <sha> --head <sha> [...] | validate [--workflow <path>]\n');
+  process.stdout.write('usage: pr-review.mjs local --base <sha> --head <sha> [...] | learn --repo <owner/name> | validate [--workflow <path>]\n');
   process.exitCode = 2;
 }
 
