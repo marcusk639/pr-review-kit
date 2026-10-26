@@ -61,12 +61,23 @@ publish step clears NODE_OPTIONS and BASH_ENV and runs pinned engine code that t
   Skill, Task, Agent, the action's MCP servers; Write/Edit on the workspace, the kit, runner command files and the
   snapshot; Read of `.git/`, `.claude-pr/` (the action's copy of the PR head's sensitive paths), `.review-base/`,
   `/proc`, the runner's `~/.claude` and `~/.config`, the command files, and `config.withheld` paths.
-- **Neutralize PR head** (model-free, after the knowledge restore): symlinks become placeholder files;
+- **Neutralize PR head** (model-free, after the knowledge restore and before facts): symlinks become placeholder files;
   `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` at any depth (root included), nested `.claude/`, `.ignore`,
   `.rgignore`, `.mcp.json`, `.claude.json` are set aside as `*.pr-head`; the root `.claude/settings*.json` removed.
   Failing to neutralize fails the job (publish then reports an incomplete review).
 - Facts and project checks read PR files from git objects (`readHead`/`readBase`/`listFiles`) or with containment
-  checks; nothing follows a link; nothing from the PR is executed.
+  checks; nothing follows a link; nothing from the PR is executed. Facts does every GitHub read first and drops
+  `GH_TOKEN` before any check. **Project checks run in a forked child**: PATH-only env (no token, no runner
+  secrets), an empty temp cwd, a hard kill after `checks.timeoutMs` ("pre-check unavailable: name (timeout)"), git
+  only as `git -C <repo>` without user/system config; `parseOnly` parses without executing (python `-I`, stdin,
+  empty cwd); diff lines over 2000 characters never reach checks; notes are redacted, capped and carry withheld
+  paths only as hashes. `validate` rejects `child_process` in checks (a reproduced High: a PR-planted `ast.py` ran
+  inside facts through a check's `python3 -c`).
+- The review model may write only `inline.json`, `findings.json` and `summary.md`; the distill model only
+  `proposals.json` (OUT is an `--add-dir`, from which Claude Code would load `.claude/` config).
+- `id-token: write` stays: with an OAuth token and no `github_token` input, claude-code-action obtains its App
+  token through OIDC. Dropping it means passing `github_token`, which changes the action's identity; verify in the
+  skeleton run before changing.
 - External counterparts (`externalCheckouts`, public repos): fetched after neutralize, token-free (no credential
   helper, no prompt), sparse, `core.symlinks=false`, `.git` deleted, neutralized, SHA in facts; failure is
   "unavailable".
@@ -122,6 +133,9 @@ listFiles})`. A tier whose `maxTurns` is 0 does not run the model.
 - **Precision:** 👍/👎 per class and link type, per PR (a sliding window never loses counts). A non-security,
   non-protected class with enough low-precision votes is demoted (no inline comments, high-confidence only), in
   facts and publish alike.
+- **Default branch only:** learn and propose fail unless `github.ref` is the default branch, and `validate`
+  requires the learn workflow's checkouts to use `ref: ${{ github.event.repository.default_branch }}`, so a
+  dispatch from another branch cannot bring its own trust settings.
 - **Landing:** the learn job (no write token) runs `learning.commands` (format, validate) on a scratch copy of the
   proposed tree; a failure proposes nothing. The propose job (model-free, the only write token) commits only under
   `.pr-review/`, keeps one learning PR, and never overwrites a branch a maintainer edited. A learning PR is spared
@@ -129,7 +143,16 @@ listFiles})`. A tier whose `maxTurns` is 0 does not run the model.
   and `learned/*.json`. PRs opened by `GITHUB_TOKEN` trigger no workflows: the learn job's own commands are the
   check.
 
-## 8. Consumer requests: accepted, deferred, rejected
+## 8. Known tradeoffs
+
+- **Withholding is per file.** A security finding withholds every other finding that names its file (and drops
+  their inline comments and impact-table rows): reference behaviour, now with #127's canonical path matching.
+  In small repos or on hub files (`config/settings.json`) this can hide unrelated findings. Fail-closed is kept;
+  a `withholdExempt` list or location-based withholding is deferred to after the trial.
+- `learning.forbidden` entries are exact knowledge-file names or globs (relative to `.pr-review/`); anything
+  else is a config error.
+
+## 9. Consumer requests: accepted, deferred, rejected
 
 **Accepted and built:** project addendum and knowledge list (E1); tier set/disabled/caps/light patterns and
 exclusions (E2, behaviouralDocs, rag-system lightFiles); routing (E3); project checks with `readHead`/`readBase`/
@@ -147,8 +170,7 @@ guards (E12) and the job timeout (E13) → the consumer's workflow (`if:`, `time
 the two-word `area` rule; `audience` → `visibility` plus `securityChannel`; sensitive paths → `withheld` and the
 security classes; per-framework test-tamper patterns → the `verifyDiff` script or a project check.
 
-**Deferred:** string class ids (consumers keep integers); per-project-check timeout (checks must be synchronous;
-a worker-based timeout later); `parseOnly` helper; `syncPr` procedure routing; `neverQuote`; `sizeExclude`;
+**Deferred:** string class ids (consumers keep integers); `syncPr` procedure routing; `neverQuote`; `sizeExclude`;
 commit-convention target selection; `binaryExtensions`, gitignore-aware path resolution and
 `historicalPaths`; posting to merged PRs whose head was never reviewed is supported, but no separate "late
 review" procedure; a local runner that reviews and publishes from Marcus's machine.
@@ -157,7 +179,7 @@ review" procedure; a local runner that reviews and publishes from Marcus's machi
 `trustRef`; plain-slug ledger ids without a key in private repos (the ledger freezes instead); security findings
 inline in private mode (every public surface is pointer-only).
 
-## 9. Verification
+## 10. Verification
 
 Engine: `npm test` (ported reference tests plus config, tiers, project checks, git reads, neutralize, externals,
 withheld, private channels, feedback marker, learning fixtures, learn commands, learning-PR exemption, workflow

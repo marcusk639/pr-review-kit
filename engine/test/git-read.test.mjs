@@ -39,3 +39,14 @@ test('listAt lists committed regular files matching a glob, never symlinks', () 
   assert.deepEqual(listAt(sha, 'src/**', root), ['src/a.ts']);
   assert.deepEqual(listAt(sha, '*.example', root), ['env.example']);
 });
+
+test('diffs report non-ASCII and spaced paths unquoted', async () => {
+  const { prDiff } = await import('../lib/diff.mjs');
+  const g = (...a) => execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { cwd: root, encoding: 'utf8' }).trim();
+  writeFileSync(join(root, 'Résumé — draft.md'), 'x\n');
+  g('add', 'Résumé — draft.md');
+  g('commit', '-qm', 'accents');
+  const next = g('rev-parse', 'HEAD');
+  assert.deepEqual(prDiff(sha, next, root).map((f) => f.file), ['Résumé — draft.md']);
+  assert.deepEqual(listAt(next, '*.md', root), ['Résumé — draft.md']);
+});

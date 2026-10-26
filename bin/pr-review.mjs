@@ -71,6 +71,8 @@ async function local(o) {
   };
   process.stdout.write(execFileSync('node', [join(ENGINE, 'facts.mjs')], { cwd, env, encoding: 'utf8' }));
   const tier = /tier=(\S+)/.exec(readFileSync(ghOut, 'utf8'))?.[1] ?? 'none';
+  // External counterparts into the temp dir (PR_REVIEW_EXTERNAL_LOCAL maps dir → local path).
+  if (tier !== 'none') process.stdout.write(execFileSync('node', [join(ENGINE, 'externals.mjs')], { cwd, env: { ...env, PR_REVIEW_EXTERNAL_ROOT: tmp }, encoding: 'utf8' }));
   try {
     process.stdout.write(`\n=== facts.md ===\n${readFileSync(join(out, 'facts.md'), 'utf8')}`);
   } catch {

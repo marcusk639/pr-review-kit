@@ -21,6 +21,9 @@ export const SECRET_PATTERNS = [
   P(B, 'SG', '\\.', '[\\w-]{20,}', '\\.', '[\\w-]{20,}'),
   P(B, 're', '_', '(?=[A-Za-z0-9]*\\d)', '[A-Za-z0-9]{20,}'),
   P(B, 'AIza', '[0-9A-Za-z_-]{35}'),
+  P(B, 'eyJ', '[A-Za-z0-9_-]{10,}', '\\.', 'eyJ', '[A-Za-z0-9_-]{10,}', '\\.', '[A-Za-z0-9_-]{10,}'),
+  P('(?<=[Bb]earer )', '[A-Za-z0-9._~+/-]{20,}=*'),
+  P(B, 'xox[abposr]', '-', '[A-Za-z0-9-]{10,}'),
   P('-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)'),
 ];
 

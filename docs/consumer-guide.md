@@ -88,9 +88,13 @@ export default [
 ];
 ```
 
-Facts are hints the model must confirm; notes are redacted. A check that throws or returns a non-array (including a
-promise) is "pre-check unavailable: <name>" and labels the review partial. Never read the working tree directly:
-use `readHead`/`readBase`, which never follow links. Never execute PR content.
+Checks run in a child process with no token and an empty working directory, killed after `checks.timeoutMs`
+(default 20000). Use `ctx.git(args)` (runs `git -C <repo>`), `readHead`/`readBase`/`listFiles`, `mergeBase`, and
+`parseOnly(kind, text)` (`python`, `bash`, `node`, `json`: parses, never executes). Never import
+`child_process` (validate rejects it) and never read the working tree directly. Notes should carry file, line and
+rule only: they are redacted, capped at 300 characters, and withheld paths become `withheld:<hash>`. Diff lines
+over 2000 characters are not passed to checks. A check that throws, times out or returns a non-array (including a
+promise) is "pre-check unavailable: <name>" and labels the review partial.
 
 ## 4. Workflows
 
@@ -117,6 +121,11 @@ config, never to the model. `config.style { noEmoji, noEmDash }` applies to post
 Merged PRs: to also review PRs that merge before a review finishes, add `closed` to the trigger types and
 `(github.event.action != 'closed' || github.event.pull_request.merged) &&` to the job `if:` (validate requires the
 guard); a head that was already reviewed gets tier `none`.
+
+Learning workflow: every checkout uses `ref: ${{ github.event.repository.default_branch }}`; learn and propose fail
+on any other ref (a dispatch from another branch must not bring its own trust settings). `learning.forbidden`
+entries are knowledge-file names or globs relative to `.pr-review/` (e.g. `maps/**`); anything else is a config
+error.
 
 Pass `trust_sha: ${{ steps.review.outputs.trust_sha }}` to publish. Any other secret is a `validate` error
 (`GITHUB_TOKEN` excepted).

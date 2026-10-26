@@ -100,3 +100,10 @@ test('known fake credentials can be allow-listed by path or pattern', () => {
   assert.deepEqual(checkSecrets([file({ file: 'src/x.ts', added: add(`k = "${fake}"`) })]), []);
   assert.equal(checkSecrets([file({ file: 'src/x.ts', added: add(`k = "${['sk', 'live', 'B'.repeat(24)].join('_')}"`) })]).length, 1);
 });
+
+test('JWTs, bearer tokens and Slack tokens are redacted', () => {
+  const jwt = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiIxMjM0NTY3ODkwIn0', 'abcdefghijklmnopqrstuv'].join('.');
+  const slack = ['xoxb', '123456789012', 'abcdefghijklmnop'].join('-');
+  const out = redact(`a ${jwt} b Authorization: Bearer abcdefghijklmnopqrstuvwxyz123 c ${slack}`);
+  assert.doesNotMatch(out, /abcdefghijklmnopqrstuv\b|qrstuvwxyz123|abcdefghijklmnop$/);
+});
