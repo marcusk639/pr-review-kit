@@ -45,7 +45,7 @@ test('secrets are checked by role, not by name', () => {
   assert.match(errs(wf((s) => s.replace('          action_outcome:', '          claude_code_oauth_token: ${{ secrets.X }}\n          action_outcome:'))), /claude_code_oauth_token may only be passed to the review or learn action/);
   assert.match(errs(wf((s) => s.replace('          claude_code_oauth_token:', '          id_key: ${{ secrets.PR_REVIEW_ID_KEY }}\n          claude_code_oauth_token:'))), /id_key may only be passed to the publish action/);
   assert.match(errs(wf((s) => s.replace('    steps:\n', '    env:\n      X: ${{ secrets.OTHER }}\n    steps:\n'))), /secret OTHER is not mapped to a kit input/);
-  assert.deepEqual(checkWorkflow(wf((s) => s.replace('    steps:\n', '    env:\n      GH: ${{ secrets.GH_TOKEN }}\n    steps:\n')), { kind: 'review', securityChannel: 'advisory' }).errors, []);
+  assert.deepEqual(checkWorkflow(wf((s) => s.replace('    steps:\n', '    env:\n      GH: ${{ secrets.GITHUB_TOKEN }}\n    steps:\n')), { kind: 'review', securityChannel: 'advisory' }).errors, []);
 });
 
 test('trigger, permissions and comments are read the way GitHub reads them', () => {
@@ -91,4 +91,11 @@ test('M4: only the canonical kit owner counts as a kit action', () => {
 test('M4: review guards must sit in the job condition, not anywhere in the file', () => {
   const moved = wf((s) => s.replace('\n      && github.event.pull_request.head.repo.full_name == github.repository', '').replace('    steps:\n', '    env:\n      NOTE: "github.event.pull_request.head.repo.full_name == github.repository"\n    steps:\n'));
   assert.match(errs(moved), /same-repo guard/);
+});
+
+test('GITHUB_TOKEN, the built-in, is allowed anywhere; a user secret named GH_TOKEN is not', () => {
+  const env = (expr) => wf((s) => s.replace('    steps:\n', `    env:\n      T: \${{ ${expr} }}\n    steps:\n`));
+  for (const e of ['secrets.GITHUB_TOKEN', "secrets['GITHUB_TOKEN']", 'secrets.github_token']) assert.deepEqual(checkWorkflow(env(e), { kind: 'review', securityChannel: 'advisory' }).errors, [], e);
+  assert.match(errs(env('secrets.GH_TOKEN')), /secret GH_TOKEN is not mapped to a kit input/);
+  assert.match(errs(wf((s) => s.replace('          action_outcome:', '          claude_code_oauth_token: ${{ secrets.GH_TOKEN }}\n          action_outcome:'))), /claude_code_oauth_token may only be passed to the review or learn action/);
 });

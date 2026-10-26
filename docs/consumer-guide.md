@@ -128,7 +128,7 @@ entries are knowledge-file names or globs relative to `.pr-review/` (e.g. `maps/
 error.
 
 Pass `trust_sha: ${{ steps.review.outputs.trust_sha }}` to publish. Any other secret is a `validate` error
-(`GH_TOKEN` excepted).
+(`GITHUB_TOKEN` excepted).
 
 ## 5. Check it locally
 

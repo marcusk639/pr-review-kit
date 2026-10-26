@@ -57,7 +57,7 @@ const NOT_MAPPED = (name) => `secret ${name} is not mapped to a kit input (only 
 function checkSecrets(text, steps, errors) {
   if (/toJSON\s*\(\s*secrets\s*\)/i.test(text)) errors.push('toJSON(secrets) exposes every secret; map each one to its kit input');
   if (/^\s*secrets:\s*inherit\s*$/im.test(text)) errors.push('secrets: inherit passes every secret; map each one to its kit input');
-  const names = (t) => [...t.matchAll(SECRET)].map((m) => m[1] ?? m[2]).filter((n) => n.toUpperCase() !== 'GH_TOKEN');
+  const names = (t) => [...t.matchAll(SECRET)].map((m) => m[1] ?? m[2]).filter((n) => n.toUpperCase() !== 'GITHUB_TOKEN');
   const outside = names(text);
   for (const step of steps) {
     for (const line of step.split('\n')) {
