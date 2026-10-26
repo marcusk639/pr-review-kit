@@ -54,10 +54,18 @@ function checkUses(text, errors) {
 const SECRET = /secrets(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*\])/gi;
 const NOT_MAPPED = (name) => `secret ${name} is not mapped to a kit input (only claude_code_oauth_token, id_key, advisory_token, private_issue_token, redact_terms)`;
 
-function checkSecrets(text, steps, errors) {
+// The workflow token: ${{ github.token }} is the preferred reference and is
+// not a secrets.* expression. secrets.GITHUB_TOKEN (the built-in) and
+// secrets.GH_TOKEN (a user-defined secret, possibly a broader PAT) are allowed
+// anywhere, each with a warning recommending github.token.
+const TOKEN_SECRETS = { GITHUB_TOKEN: 'secrets.GITHUB_TOKEN works but ${{ github.token }} is the preferred reference', GH_TOKEN: 'secrets.GH_TOKEN is a user-defined secret (possibly a broader PAT); prefer ${{ github.token }}' };
+
+function checkSecrets(text, steps, errors, warnings = []) {
+  const seen = new Set([...text.matchAll(SECRET)].map((m) => (m[1] ?? m[2]).toUpperCase()).filter((n) => n in TOKEN_SECRETS));
+  for (const n of seen) warnings.push(TOKEN_SECRETS[n]);
   if (/toJSON\s*\(\s*secrets\s*\)/i.test(text)) errors.push('toJSON(secrets) exposes every secret; map each one to its kit input');
   if (/^\s*secrets:\s*inherit\s*$/im.test(text)) errors.push('secrets: inherit passes every secret; map each one to its kit input');
-  const names = (t) => [...t.matchAll(SECRET)].map((m) => m[1] ?? m[2]).filter((n) => n.toUpperCase() !== 'GITHUB_TOKEN');
+  const names = (t) => [...t.matchAll(SECRET)].map((m) => m[1] ?? m[2]).filter((n) => !(n.toUpperCase() in TOKEN_SECRETS));
   const outside = names(text);
   for (const step of steps) {
     for (const line of step.split('\n')) {
@@ -114,7 +122,7 @@ export function checkWorkflow(yml, { kind = 'review', securityChannel = 'advisor
   const text = stripComments(yml);
   const steps = stepsOf(text);
   const kitSha = checkUses(text, errors);
-  checkSecrets(text, steps, errors);
+  checkSecrets(text, steps, errors, warnings);
   if (kind === 'review') checkReviewShape(text, steps, { securityChannel }, errors, warnings);
   return { errors, warnings, kitSha, steps, text };
 }

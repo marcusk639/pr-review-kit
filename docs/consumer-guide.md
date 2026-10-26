@@ -127,8 +127,9 @@ on any other ref (a dispatch from another branch must not bring its own trust se
 entries are knowledge-file names or globs relative to `.pr-review/` (e.g. `maps/**`); anything else is a config
 error.
 
-Pass `trust_sha: ${{ steps.review.outputs.trust_sha }}` to publish. Any other secret is a `validate` error
-(`GITHUB_TOKEN` excepted).
+Pass `trust_sha: ${{ steps.review.outputs.trust_sha }}` to publish. Any other secret is a `validate` error. Refer
+to the workflow token as `${{ github.token }}` (the actions already do); `${{ secrets.GITHUB_TOKEN }}` and
+`${{ secrets.GH_TOKEN }}` (a user-defined secret, possibly a broader PAT) validate with a warning.
 
 ## 5. Check it locally
 
