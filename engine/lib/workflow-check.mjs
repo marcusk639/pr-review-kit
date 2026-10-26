@@ -73,6 +73,7 @@ function checkReviewShape(text, steps, { securityChannel }, errors, warnings) {
   if (!/^\s{2}pull_request:/m.test(text) && !/^on:\s*\[?[^\n]*\bpull_request\b/m.test(text)) errors.push('the review workflow must trigger on pull_request');
   if (!text.includes('github.event.pull_request.head.repo.full_name == github.repository')) errors.push('the job needs the same-repo guard (forks get no secrets)');
   if (!text.includes('!github.event.pull_request.draft')) errors.push('the job must skip draft PRs');
+  if (/types:\s*\[[^\]]*\bclosed\b/.test(text) && !/github\.event\.action != 'closed' \|\| github\.event\.pull_request\.merged/.test(text)) errors.push("closed PRs need the merged guard: (github.event.action != 'closed' || github.event.pull_request.merged)");
   if (!text.includes("github.actor != 'dependabot[bot]'")) warnings.push('the job does not skip Dependabot (its runs get no secrets)');
   if (/write-all/.test(text)) errors.push('permissions: write-all is not allowed');
   if (/^\s+contents:\s*write\s*$/m.test(text)) errors.push('the review workflow must not grant contents: write');

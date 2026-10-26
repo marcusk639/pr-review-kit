@@ -5,6 +5,7 @@ import { redact, secretPatterns } from './lib/redact.mjs';
 import { git } from './lib/diff.mjs';
 import { PROJECT_SUBDIR, activeProject } from './lib/config.mjs';
 import { learningPrOnly } from './lib/learning-pr.mjs';
+import { matches } from './lib/glob.mjs';
 
 // Every check reads its settings from the project's config.checks; a check set
 // to false returns no facts.
@@ -23,15 +24,20 @@ const fact = (check, file, line, note) => {
   return f;
 };
 
+// secrets.allowPaths / allowPatterns: known fake test credentials, skipped.
 export function checkSecrets(files) {
   const facts = [];
   if (!checks().secrets) return facts;
+  const { allowPaths, allowPatterns } = activeProject().config.secrets;
+  const allowed = allowPatterns.map((p) => new RegExp(p));
   for (const f of files) {
-    if (f.binary) continue;
+    if (f.binary || allowPaths.some((g) => matches(f.file, g))) continue;
     for (const a of f.added) {
-      if (secretPatterns().some((re) => re.test(a.text))) {
-        facts.push(fact('secrets', f.file, a.line, 'added line matches a secret pattern; rotate and remove it'));
-      }
+      const hit = secretPatterns().some((re) => {
+        const m = re.exec(a.text);
+        return m && !allowed.some((al) => al.test(m[0]));
+      });
+      if (hit) facts.push(fact('secrets', f.file, a.line, 'added line matches a secret pattern; rotate and remove it'));
     }
   }
   return facts;

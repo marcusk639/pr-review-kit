@@ -9,8 +9,11 @@ const day = (at) => String(at ?? '').slice(0, 10) || 'undated';
 const scopeLine = (s) => `Scope: ${(s.paths ?? []).map((p) => `\`${p}\``).join(', ')}; class ${s.class}${s.linkTypes?.length ? `; link types: ${s.linkTypes.join(', ')}` : ''}`;
 const sourcesLine = (srcs) => `Sources: ${(srcs ?? []).map((x) => `${x.url} (#${x.pr}, ${day(x.at)})`).join('; ')}`;
 
+// One line, no HTML comments: a rule can never close the managed block.
+const oneLine = (t) => String(t ?? '').replace(/<!--|-->/g, '').replace(/\s+/g, ' ').trim();
+
 export function lessonItem(l, { withRule = true } = {}) {
-  const rule = withRule ? l.rule : '(text withheld: security; see the sources)';
+  const rule = withRule ? oneLine(l.rule) : '(text withheld: security; see the sources)';
   return [`- **${l.id}** (${l.date}) ${rule}`, `  - ${scopeLine(l.scope)}`, `  - ${sourcesLine(l.sources)}`].join('\n');
 }
 
@@ -20,7 +23,7 @@ export function renderKnowledge(texts, lessons) {
   for (const [file, text] of Object.entries(texts)) {
     const mine = lessons.filter((l) => l.status === 'active' && l.target === file).sort((a, b) => a.id.localeCompare(b.id));
     const block = `${BEGIN}\n${mine.map((l) => `${lessonItem(l)}\n`).join('')}${END}`;
-    if (BLOCK_RE.test(text)) out[file] = text.replace(BLOCK_RE, block);
+    if (BLOCK_RE.test(text)) out[file] = text.replace(BLOCK_RE, () => block);
     else if (mine.length) out[file] = `${text.replace(/\n*$/, '\n')}\n## Learned from review feedback\n\n${block}\n`;
     else out[file] = text;
   }

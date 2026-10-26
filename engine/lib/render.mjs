@@ -8,6 +8,7 @@ import { validateFindings, securityPointer } from './findings.mjs';
 import { securityNeedles, mentions, touchesSecurityFile } from './needles.mjs';
 import { handleOf } from './feedback.mjs';
 import { activeProject } from './config.mjs';
+import { applyStyle } from './style.mjs';
 
 export { validateFindings, securityPointer };
 
@@ -178,7 +179,7 @@ function assemble(head, groups, narrative, markerText, sections = []) {
   if (text.length > room) text = `${text.slice(0, Math.max(0, room - TRUNC.length - 2))}\n${TRUNC}`;
   // The summary marker must stay the first line whatever was cut.
   if (!text.startsWith(SUMMARY_MARKER)) text = `${SUMMARY_MARKER}\n${text}`;
-  return `${text}\n\n${markerText}`;
+  return `${applyStyle(text)}\n\n${markerText}`;
 }
 
 const advisory = () => '_Advisory only: not a required check. Security-relevant findings show only a pointer here._';

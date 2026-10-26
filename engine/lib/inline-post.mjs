@@ -14,6 +14,7 @@ import { securityNeedles, touchesSecurityFile } from './needles.mjs';
 import { SLUG_RE } from './findings.mjs';
 import { activeProject } from './config.mjs';
 import { isWithheld } from './withheld.mjs';
+import { applyStyle } from './style.mjs';
 
 // Defaults; the project's config.inline overrides both.
 export const MAX_INLINE = 10;
@@ -109,7 +110,7 @@ export function selectInline({ entries, findings, changedFiles, postedSlugs, isS
       } else {
         seen.add(e.slug);
         // Redacted before the cap, so a secret straddling the cut cannot survive as a fragment.
-        out.push({ ...c, body: redact(`${redact(text).slice(0, MAX_BODY)}\n\n${fpMarker(e.slug)}`) });
+        out.push({ ...c, body: redact(`${applyStyle(redact(text)).slice(0, MAX_BODY)}\n\n${fpMarker(e.slug)}`) });
       }
     }
   }

@@ -52,3 +52,10 @@ test('in a public repo a flagged security lesson does not repeat its text in the
   assert.doesNotMatch(body, /skips auth by design/);
   assert.match(body, /text withheld: security/);
 });
+
+test('rule text cannot break the managed block or inject replacement patterns', () => {
+  const out = renderKnowledge({ 'false-positives.md': `${BEGIN}\n${END}\n` }, [lesson({ rule: 'costs $& and $1 <!-- pr-review:learned:end --> tail\nnext' })]);
+  assert.match(out['false-positives.md'], /costs \$& and \$1/);
+  assert.equal(out['false-positives.md'].split(END).length, 2, 'exactly one closing marker');
+  assert.doesNotMatch(out['false-positives.md'], /tail\nnext/);
+});

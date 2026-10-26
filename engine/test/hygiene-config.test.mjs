@@ -2,7 +2,7 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { RP } from './helpers/rp.mjs';
 import { normalizeConfig, setActiveProject } from '../lib/config.mjs';
-import { checkPiiLogs, checkNewFileSize, checkTitleScope, checkSelfEdit, checkEnginePin } from '../hygiene.mjs';
+import { checkPiiLogs, checkNewFileSize, checkTitleScope, checkSelfEdit, checkEnginePin, checkSecrets } from '../hygiene.mjs';
 import { redact } from '../lib/redact.mjs';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -91,4 +91,12 @@ test('redaction terms from the environment are removed case-insensitively and ne
     delete process.env.PR_REVIEW_REDACT_TERMS;
   }
   assert.equal(redact('acmetenant'), 'acmetenant');
+});
+
+test('known fake credentials can be allow-listed by path or pattern', () => {
+  const fake = ['sk', 'test', 'A'.repeat(24)].join('_');
+  use({ secrets: { allowPaths: ['test/fixtures/**'], allowPatterns: ['_test_A{24}'] } });
+  assert.deepEqual(checkSecrets([file({ file: 'test/fixtures/x.ts', added: add(`k = "${['sk', 'live', 'B'.repeat(24)].join('_')}"`) })]), []);
+  assert.deepEqual(checkSecrets([file({ file: 'src/x.ts', added: add(`k = "${fake}"`) })]), []);
+  assert.equal(checkSecrets([file({ file: 'src/x.ts', added: add(`k = "${['sk', 'live', 'B'.repeat(24)].join('_')}"`) })]).length, 1);
 });

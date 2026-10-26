@@ -35,6 +35,7 @@ export const DEFAULTS = Object.freeze({
   inline: { max: 10, severities: ['Critical', 'High'] },
   secrets: { extraPatterns: [], allowPaths: [], allowPatterns: [] },
   issueBody: { extraPatterns: [] },
+  style: { noEmoji: false, noEmDash: false },
   checks: {
     secrets: true,
     piiLogs: { fields: 'email|phone|address|password|token', logCall: '\\b(?:logger|console)\\.' },
@@ -92,6 +93,7 @@ const SCHEMA = obj({
   inline: obj({ max: int(0, 50), severities: list(oneOf(...SEVERITIES)) }),
   secrets: obj({ extraPatterns: list(regex), allowPaths: globs, allowPatterns: list(regex) }),
   issueBody: obj({ extraPatterns: list(regex) }),
+  style: obj({ noEmoji: bool, noEmDash: bool }),
   checks: obj({
     secrets: bool,
     piiLogs: orFalse(obj({ fields: regex, logCall: regex })),
