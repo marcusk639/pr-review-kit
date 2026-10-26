@@ -31,9 +31,13 @@ const lessonsOf = (dir) => {
   const l = readJson(join(dir, 'learned/lessons.json'), null);
   return Array.isArray(l?.lessons) ? l.lessons : [];
 };
+const consumedOf = (dir) => {
+  const l = readJson(join(dir, 'learned/lessons.json'), null);
+  return Array.isArray(l?.consumed) ? l.consumed.filter((x) => typeof x === 'string') : [];
+};
 
 export function prepareLearn({ project, records, recordsByPr, out, snapshot }) {
-  const { candidates, unresolved } = buildCandidates(records, project.config, lessonsOf(project.dir));
+  const { candidates, unresolved } = buildCandidates(records, project.config, lessonsOf(project.dir), consumedOf(project.dir));
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'candidates.json'), json(candidates));
   writeFileSync(join(out, 'knowledge-files.json'), json(project.config.knowledge));
@@ -59,17 +63,16 @@ export function finishLearn({ project, root, out, snapshot, files, today, distil
   const snap = readJson(snapshot, { candidates: [], unresolved: [], recordsByPr: {} });
   const notes = [];
   const before = lessonsOf(dir);
-  const result = applyProposals({ lessons: before, candidates: snap.candidates, proposals: proposalsFor(distill, out, snap.candidates, config, notes), config, files, today });
-  if (config.visibility === 'public') {
-    // Held security lessons are committed without their text in a public repo.
-    for (const l of result.lessons) if (l.status === 'needs-decision' && /security/.test(l.why ?? '')) l.rule = '(withheld: see the sources)';
-  }
+  const result = applyProposals({ lessons: before, consumed: consumedOf(dir), candidates: snap.candidates, proposals: proposalsFor(distill, out, snap.candidates, config, notes), config, files, today });
+  // Held security lessons are committed without their text: security detail
+  // only ever travels through the private channel.
+  for (const l of result.lessons) if (l.status === 'needs-decision' && /security/.test(l.why ?? '')) l.rule = '(withheld: see the sources)';
   const priorPrecision = readPrecision(dir);
   const precision = mergePrecision(priorPrecision, snap.recordsByPr);
   const texts = Object.fromEntries(config.knowledge.map((f) => [f, readFileSync(join(dir, f), 'utf8')]));
   const rendered = renderKnowledge(texts, result.lessons);
   const proposed = {
-    [`${PROJECT_SUBDIR}/learned/lessons.json`]: [json({ version: 1, lessons: result.lessons }), JSON.stringify(before) !== JSON.stringify(result.lessons)],
+    [`${PROJECT_SUBDIR}/learned/lessons.json`]: [json({ version: 1, lessons: result.lessons, consumed: result.consumed }), JSON.stringify(before) !== JSON.stringify(result.lessons) || consumedOf(dir).length !== result.consumed.length],
     [`${PROJECT_SUBDIR}/learned/precision.json`]: [json(precision), JSON.stringify(priorPrecision.byPr) !== JSON.stringify(precision.byPr)],
     ...Object.fromEntries(Object.entries(rendered).map(([f, t]) => [`${PROJECT_SUBDIR}/${f}`, [t, t !== texts[f]]])),
   };

@@ -10,7 +10,7 @@ const scopeLine = (s) => `Scope: ${(s.paths ?? []).map((p) => `\`${p}\``).join('
 const sourcesLine = (srcs) => `Sources: ${(srcs ?? []).map((x) => `${x.url} (#${x.pr}, ${day(x.at)})`).join('; ')}`;
 
 export function lessonItem(l, { withRule = true } = {}) {
-  const rule = withRule ? l.rule : '(text withheld in a public repository; see the sources)';
+  const rule = withRule ? l.rule : '(text withheld: security; see the sources)';
   return [`- **${l.id}** (${l.date}) ${rule}`, `  - ${scopeLine(l.scope)}`, `  - ${sourcesLine(l.sources)}`].join('\n');
 }
 
@@ -47,7 +47,7 @@ export function renderPrBody({ added = [], replaced = [], pruned = [], flagged =
     ...section(
       'Needs your decision',
       flagged,
-      (l) => `${lessonItem(l, { withRule: !(pub && isSecurityHold(l)) })}\n  - Held because ${l.why}. To accept it, set its "status" to "active" in learned/lessons.json in this PR; to reject it, delete it.`,
+      (l) => `${lessonItem(l, { withRule: !isSecurityHold(l) })}\n  - Held because ${l.why}. To accept it, set its "status" to "active" in learned/lessons.json in this PR; to reject it, delete it.`,
     ),
     ...section('Unresolved feedback', unresolved, (u) => `- ${u.url ?? '(no link)'}${u.pr ? ` (#${u.pr})` : ''}: ${u.reason}${u.text && !pub ? ` — "${u.text}"` : ''}`),
     '## Precision',

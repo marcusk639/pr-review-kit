@@ -30,7 +30,7 @@ test('carried earlier findings show their handle too; security pointers do not',
 });
 
 test('the summary explains how to give feedback', () => {
-  assert.match(compose({ findingsText: text([finding('c9:a.ts:x')]) }), /React 👍\/👎 on an inline comment, or reply `F-…` 👍\/👎 with a reason/);
+  assert.match(compose({ findingsText: text([finding('c9:a.ts:x')]) }), /👍\/👎 an inline comment, or comment `review: F-1a2b3c 👎 <reason>`/);
 });
 
 test('a finding a maintainer rejected is not re-raised and its entry resolves', () => {
@@ -59,4 +59,11 @@ test('reraise is optional and must be a short string', () => {
   const doc = (f) => ({ reviewedSha: HEAD, findings: [f], resolvedSlugs: [] });
   assert.equal(validateFindings(doc(finding('c9:a.ts:x', 'Low', { reraise: 'why' }))).ok, true);
   assert.equal(validateFindings(doc(finding('c9:a.ts:x', 'Low', { reraise: 5 }))).ok, false);
+});
+
+test('a 👎 or a reply never resolves a Critical finding', () => {
+  const slug = 'c9:a.ts:crit';
+  const crit = { id: publicId(slug), slug, title: `T ${slug}`, severity: 'Critical', status: 'open', security: false, runsSinceResolved: 0 };
+  const body = compose({ state: state({ ledger: [crit], acknowledgedSlugs: [slug], feedback: { rejectedSlugs: [slug], corrections: [] } }) });
+  assert.equal(decodeLedger(body).ledger.find((x) => x.slug === slug).status, 'open');
 });

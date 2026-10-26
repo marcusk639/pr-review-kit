@@ -11,7 +11,9 @@ const EMPTY = () => ({ version: 1, byPr: {} });
 const zero = () => ({ up: 0, down: 0, protectedUp: 0, protectedDown: 0 });
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
-export const isProtected = (r) => r.security === true || r.severity === 'Critical' || r.severity === 'High';
+// Shared with candidates: a vote on a security, Critical, High or unknown-severity
+// finding never demotes a class or forms a pattern lesson.
+export const isProtected = (r) => r.security === true || r.severity == null || r.severity === 'Critical' || r.severity === 'High';
 
 function bump(map, key, r) {
   const c = (map[key] ??= zero());

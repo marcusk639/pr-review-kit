@@ -115,7 +115,7 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
   const acked = new Set([...strings(s.acknowledgedSlugs), ...strings(s.feedback?.rejectedSlugs)].map(ledgerSlug));
   const merged = markResolved(
     mergeLedger(prior.ledger, findings.findings, findings.resolvedSlugs, s.tier, { key: idKey, needles }),
-    (e) => (e.security ? dispositioned.has(e.id) : !e.withheld && acked.has(e.slug) && !reported(e)),
+    (e) => (e.security ? dispositioned.has(e.id) : !e.withheld && e.severity !== 'Critical' && acked.has(e.slug) && !reported(e)),
   );
   const ledger = {
     lastReviewedSha: reviewed,

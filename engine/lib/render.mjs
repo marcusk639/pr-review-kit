@@ -182,7 +182,7 @@ function assemble(head, groups, narrative, markerText, sections = []) {
 }
 
 const advisory = () => '_Advisory only: not a required check. Security-relevant findings show only a pointer here._';
-const FEEDBACK = '_Feedback: React 👍/👎 on an inline comment, or reply `F-…` 👍/👎 with a reason in a PR comment (e.g. `F-1a2b3c 👎 intentional: …`). Only maintainers\' feedback counts._';
+const FEEDBACK = '_Feedback: 👍/👎 an inline comment, or comment `review: F-1a2b3c 👎 <reason>` (inline replies start with `review:`). Only the repository owner\'s unedited feedback counts._';
 
 // Failure keeps the last completed review's open findings; tier "none" (no
 // model run, outcome "none") also lists what that review resolved.

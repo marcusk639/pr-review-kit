@@ -68,7 +68,7 @@ function validate(p, c, config) {
 
 const exists = (paths, files) => paths.some((p) => files.some((f) => f === p || matches(f, p)));
 
-export function applyProposals({ lessons = [], candidates = [], proposals = [], config, files = [], today }) {
+export function applyProposals({ lessons = [], consumed = [], candidates = [], proposals = [], config, files = [], today }) {
   const byId = new Map(candidates.map((c) => [c.id, c]));
   let current = lessons.map((l) => ({ ...l }));
   const out = { added: [], replaced: [], flagged: [], unresolved: [], pruned: [] };
@@ -106,5 +106,6 @@ export function applyProposals({ lessons = [], candidates = [], proposals = [], 
     current = current.filter((l) => l !== drop);
     out.pruned.push(drop);
   }
-  return { lessons: current, ...out };
+  const gone = [...out.replaced, ...out.pruned].flatMap((l) => (l.sources ?? []).map((s) => s.id));
+  return { lessons: current, consumed: [...new Set([...consumed, ...gone])].slice(-2000), ...out };
 }

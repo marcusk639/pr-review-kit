@@ -9,6 +9,7 @@
 // (any status) is not proposed again.
 import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
+import { isProtected } from './precision.mjs';
 
 const hash = (s) => createHash('sha256').update(String(s)).digest('hex').slice(0, 10);
 
@@ -23,9 +24,6 @@ const INSTRUCTION_PATTERNS = [
 
 export const instructionShaped = (text) => INSTRUCTION_PATTERNS.some((re) => re.test(String(text ?? '')));
 
-// Votes that must never shape a class-wide pattern: security, Critical or High,
-// or a severity the ledger did not record.
-const protectedVote = (r) => r.security || r.severity == null || r.severity === 'Critical' || r.severity === 'High';
 
 const source = (r) => ({ id: r.id, url: r.url, at: r.at, author: r.author, pr: r.pr });
 
@@ -73,8 +71,10 @@ function patterns(downs, config) {
   return out;
 }
 
-export function buildCandidates(records, config, lessons = []) {
-  const consumed = new Set(lessons.flatMap((l) => (l.sources ?? []).map((s) => s.id)));
+// consumed: source ids of lessons that were replaced or pruned, so their
+// feedback never returns as a candidate (lessons.json keeps the list).
+export function buildCandidates(records, config, lessons = [], consumedIds = []) {
+  const consumed = new Set([...consumedIds, ...lessons.flatMap((l) => (l.sources ?? []).map((s) => s.id))]);
   const fresh = (records ?? []).filter((r) => r.slug && r.path && Number.isInteger(r.class) && !consumed.has(r.id));
   const candidates = [];
   const unresolved = [];
@@ -85,7 +85,7 @@ export function buildCandidates(records, config, lessons = []) {
       unresolved.push({ candidate: c.id, reason: 'instruction-shaped: weighed as data, not applied', url: r.url, pr: r.pr, slug: r.slug, text: r.text });
     } else candidates.push(c);
   }
-  const downs = fresh.filter((r) => r.signal === 'down' && !r.text && !protectedVote(r));
+  const downs = fresh.filter((r) => r.signal === 'down' && !r.text && !isProtected(r));
   candidates.push(...patterns(downs, config));
   return { candidates, unresolved };
 }

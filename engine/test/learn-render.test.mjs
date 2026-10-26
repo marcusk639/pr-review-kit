@@ -50,5 +50,5 @@ test('in a public repo a flagged security lesson does not repeat its text in the
   const pub = normalizeConfig({ version: 1, project: 'p', visibility: 'public', classes: [{ id: 1, name: 'auth', security: true }] }).config;
   const body = renderPrBody({ added: [], replaced: [], pruned: [], flagged: [lesson({ id: 'L-5', status: 'needs-decision', why: 'class 1 is a security class', rule: 'Endpoint X skips auth by design', scope: { paths: ['src/auth.ts'], class: 1, linkTypes: [] } })], unresolved: [], precisionMd: '', config: pub });
   assert.doesNotMatch(body, /skips auth by design/);
-  assert.match(body, /text withheld in a public repository/);
+  assert.match(body, /text withheld: security/);
 });
