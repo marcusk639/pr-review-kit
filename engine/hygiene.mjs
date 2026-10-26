@@ -90,14 +90,15 @@ export function checkTitleScope(title) {
   return [];
 }
 
-// ctx (optional): { baseSha, headSha, repoRoot }. A pure learning PR (bot
-// commits confined to learned memory) gets one learning-pr fact instead.
+// ctx (optional): { baseSha, headSha, repoRoot, learningPrApi }. A pure learning
+// PR (API-verified bot PR and commits, changes confined to learned memory) gets
+// one learning-pr fact instead.
 export function checkSelfEdit(files, ctx = {}) {
   if (!checks().selfEdit) return [];
   const { workflowPath, learnWorkflowPath } = activeProject().config;
   const kind = (p) => (p === workflowPath ? 'workflow' : p === learnWorkflowPath ? 'learn' : REVIEW_DIR.test(p ?? '') ? 'scripts' : null);
   const hits = files.map((f) => [f, kind(f.file) ?? kind(f.oldFile)]).filter(([, k]) => k);
-  if (hits.length && hits.every(([, k]) => k === 'scripts') && ctx.headSha && learningPrOnly(ctx.baseSha, ctx.headSha, ctx.repoRoot)) {
+  if (hits.length && hits.every(([, k]) => k === 'scripts') && ctx.headSha && ctx.learningPrApi === true && learningPrOnly(ctx.baseSha, ctx.headSha, ctx.repoRoot)) {
     return [fact('learning-pr', PROJECT_SUBDIR, null, 'learning PR: bot commits confined to learned memory; review the lessons themselves (scope, wording, coverage), not as a self-edit')];
   }
   return hits.map(([f, k]) => fact('self-edit', f.file, null, SELF_EDIT_NOTE[k]));

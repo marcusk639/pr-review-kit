@@ -39,9 +39,11 @@ test('nothing is withheld without patterns', () => {
   assert.equal(withholdDiff(DIFF), DIFF);
 });
 
-test('withheld globs become read denies for the model, sanitised', () => {
+test('withheld globs become read denies for the model; an unsafe one is a hard error, never dropped', () => {
+  use(['notes/**']);
+  assert.equal(withheldDenies('/ws'), 'Read(//ws/notes/**),Read(//ws/notes/**.pr-head)');
   use(['notes/**', 'bad,glob"x']);
-  assert.equal(withheldDenies('/ws'), 'Read(//ws/notes/**)');
+  assert.throws(() => withheldDenies('/ws'));
 });
 
 test('no inline comment on a withheld path', () => {
@@ -49,4 +51,20 @@ test('no inline comment on a withheld path', () => {
   const f = { slug: 'c9:notes/private.md:x', class: 9, severity: 'High', security: false, title: 't', why: 'w', fix: 'f', feature: 'x', locations: [{ file: 'notes/private.md', line: 1, side: 'changed' }] };
   const out = selectInline({ entries: [{ slug: f.slug, path: 'notes/private.md', line: 2, side: 'RIGHT', body: 'b' }], findings: [f], changedFiles: ['notes/private.md'], postedSlugs: [] });
   assert.deepEqual(out, []);
+});
+
+test('withheld globs the Read deny cannot express are config errors, never silently dropped', async () => {
+  const { normalizeConfig: n } = await import('../lib/config.mjs');
+  const base = { version: 1, project: 'p', classes: [{ id: 9, name: 'x' }] };
+  for (const bad of ['Café/**', 'My Notes/**', 'a b/**', 'x,y/**', 'a"b', '../up/**', '/abs/**', 'a/**b/c']) {
+    assert.match(n({ ...base, withheld: [bad] }).errors.join(), /withheld/, bad);
+  }
+  assert.deepEqual(n({ ...base, withheld: ['Clients/**', 'notes/*.md', 'secret-?.txt'] }).errors, []);
+});
+
+test('the diff stub and the Read deny use one semantic, and the .pr-head variant is denied too', () => {
+  use(['notes/*.md']);
+  assert.equal(withheldDenies('/ws'), 'Read(//ws/notes/*.md),Read(//ws/notes/*.md.pr-head)');
+  const nested = DIFF.replace(/notes\/private\.md/g, 'notes/deep/private.md');
+  assert.match(withholdDiff(nested), /Jane/, '* stays within one segment in both');
 });

@@ -2,11 +2,10 @@
 // material). The model gets Read denies for them and a diff whose hunks for
 // them are replaced by a one-line stub; facts' checks and the secret scan
 // still see the full diff; publish never posts an inline comment on them.
-import { activeProject } from './config.mjs';
+import { SAFE_GLOB, activeProject } from './config.mjs';
 import { matches } from './glob.mjs';
 import { parseUnifiedDiff } from './diff.mjs';
 
-const SAFE_GLOB = /^[A-Za-z0-9_.*?\/-]+$/;
 
 export const isWithheld = (path, project = activeProject()) => project.config.withheld.some((g) => matches(String(path ?? ''), g));
 
@@ -25,6 +24,10 @@ export function withholdDiff(text, project = activeProject()) {
 }
 
 // Comma-joined Read denies for --disallowedTools (unsafe globs are dropped).
+// Config validation rejects any glob outside SAFE_GLOB, so none is dropped here
+// silently; a stray one is a hard error (fail closed: no review).
 export function withheldDenies(workspace, project = activeProject()) {
-  return project.config.withheld.filter((g) => SAFE_GLOB.test(g)).map((g) => `Read(/${workspace}/${g})`).join(',');
+  const globs = project.config.withheld;
+  if (globs.some((g) => !SAFE_GLOB(g))) throw new Error('withheld glob cannot be expressed as a Read deny');
+  return globs.flatMap((g) => [`Read(/${workspace}/${g})`, `Read(/${workspace}/${g}.pr-head)`]).join(',');
 }

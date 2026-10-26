@@ -23,6 +23,7 @@ import { resolveProjectChecks, runProjectChecks } from './lib/project-checks.mjs
 import { readAt } from './lib/git-read.mjs';
 import { withheldDenies } from './lib/withheld.mjs';
 import { mergeFromBase, writeCollaborators } from './lib/repo-facts.mjs';
+import { verifyLearningPr } from './lib/learning-pr.mjs';
 import { buildFacts } from './lib/facts-render.mjs';
 import { checkSecrets, checkPiiLogs, checkNewFileSize, checkTitleScope, checkSelfEdit, checkEnginePin, runVerifyDiff } from './hygiene.mjs';
 
@@ -58,7 +59,7 @@ const readOr = (p) => {
   }
 };
 
-async function runChecks({ files, repoRoot, baseSha, headSha, title, baseDir, projectChecks }) {
+async function runChecks({ files, repoRoot, baseSha, headSha, title, baseDir, projectChecks, learningPrApi }) {
   const config = activeProject().config;
   const verify = config.checks.verifyDiff ? join(baseDir, config.checks.verifyDiff.script) : null;
   const checks = [
@@ -66,7 +67,7 @@ async function runChecks({ files, repoRoot, baseSha, headSha, title, baseDir, pr
     ['checkPiiLogs', () => checkPiiLogs(files)],
     ['checkNewFileSize', () => checkNewFileSize(files, repoRoot)],
     ['checkTitleScope', () => checkTitleScope(title)],
-    ['checkSelfEdit', () => checkSelfEdit(files, { baseSha, headSha, repoRoot })],
+    ['checkSelfEdit', () => checkSelfEdit(files, { baseSha, headSha, repoRoot, learningPrApi })],
     ['checkEnginePin', () => checkEnginePin({ base: readOr(join(baseDir, config.workflowPath)), head: readAt(headSha, config.workflowPath, repoRoot) })],
     ['runVerifyDiff', () => runVerifyDiff(baseSha, repoRoot, verify, headSha)],
   ];
@@ -217,8 +218,10 @@ async function main() {
       pull = null;
     }
     const prContext = pull ? await gatherContext(REPO, PR, pull, deps.listIssueComments) : 'PR context unavailable';
+    // A learning PR is identified through the API (author, branch, commit logins), never git metadata.
+    const learningPrApi = !deps.offline && paths.some((p) => p.startsWith(`${PROJECT_SUBDIR}/`)) ? await verifyLearningPr({ repo: REPO, pr: PR, branch: project.config.learning.branch, request: deps.request }) : false;
     delete process.env.GH_TOKEN;
-    const checked = tier === 'none' ? [] : await runChecks({ files, repoRoot, baseSha: BASE_SHA, headSha: HEAD_SHA, title: PR_TITLE, baseDir, projectChecks: project.projectChecks });
+    const checked = tier === 'none' ? [] : await runChecks({ files, repoRoot, baseSha: BASE_SHA, headSha: HEAD_SHA, title: PR_TITLE, baseDir, projectChecks: project.projectChecks, learningPrApi });
     const results = [...checked, ...repoChecks, ...(tier === 'none' ? [] : loadFailures)];
     mkdirSync(out, { recursive: true });
     if (tier !== 'none') recordMaterial(state, writeMaterial(out, { baseSha: BASE_SHA, headSha: HEAD_SHA, tier, incrementText: inc.incrementText, cwd: repoRoot }));

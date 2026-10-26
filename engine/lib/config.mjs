@@ -52,6 +52,7 @@ export const DEFAULTS = Object.freeze({
 });
 
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+export const SAFE_GLOB = (g) => typeof g === 'string' && /^[A-Za-z0-9_.*?/-]+$/.test(g) && !g.startsWith('/') && g.split('/').every((s) => s && s !== '..' && s !== '.' && (s === '**' || !s.includes('**')));
 const strList = list(str);
 const globs = list(str);
 const strs = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
@@ -138,6 +139,8 @@ export function normalizeConfig(raw) {
   if (c.securityChannel === 'advisory' && c.visibility !== 'public') errors.push('securityChannel advisory requires visibility public (advisories are public-repo only)');
   if (!BRANCH_RE.test(c.learning.branch) || PROTECTED_BRANCHES.has(c.learning.branch)) errors.push('learning.branch must be a dedicated branch name, not a default branch');
   checkClasses(c.classes, errors);
+  // One glob dialect both the diff stub and the model's Read deny agree on.
+  for (const g of c.withheld) if (!SAFE_GLOB(g)) errors.push(`withheld: ${JSON.stringify(g)} cannot be expressed as a Read deny; use relative paths of ASCII letters, digits, . _ - and * ? (** only as a whole segment), e.g. "Caf*/**"`);
   for (const f of c.learning.forbidden) if (!/[*?]/.test(f) && !c.knowledge.includes(f)) errors.push(`learning.forbidden: ${f} is neither a glob nor a knowledge file (names are relative to .pr-review/)`);
   return { config: c, errors };
 }

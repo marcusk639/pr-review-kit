@@ -29,7 +29,7 @@ test('Run start sets OUT, STATE_FILE and RUN_STARTED_AT through GITHUB_ENV befor
 });
 
 test('the base checkout path is cleared before the base checkout, which persists no credentials', () => {
-  assert.match(stepOf(review, 'Clear base checkout path'), /run: rm -rf \.review-base\n/);
+  assert.match(stepOf(review, 'Clear base checkout path'), /run: rm -rf \.review-base \.review-publish \.pr-review-external\n/);
   assert.ok(review.indexOf('Clear base checkout path') < review.indexOf('Checkout trust SHA'));
   for (const yml of [review, publish]) {
     const checkouts = [...yml.matchAll(/uses: actions\/checkout@[0-9a-f]{40}.*\n(\s+with:\n(?:\s{8}.*\n)+)/g)];
@@ -78,7 +78,8 @@ test('model writes and edits are allowed only under OUT; workspace and kit write
   const files = ['inline.json', 'findings.json', 'summary.md'];
   assert.deepEqual(allow, ['Read', 'Grep', 'Glob', ...files.map((f) => `Write(/\${{ runner.temp }}/pr-review/${f})`), ...files.map((f) => `Edit(/\${{ runner.temp }}/pr-review/${f})`)]);
   assert.ok(deny.includes('Write(/${{ runner.temp }}/pr-review/.claude/**)'));
-  for (const t of ['Skill', 'Task', 'Agent', 'mcp__github', 'Read(./.claude-pr/**)', 'Read(/${{ github.workspace }}/.claude-pr/**)']) assert.ok(deny.includes(t), t);
+  for (const t of ['Skill', 'Task', 'Agent', 'mcp__github', 'Read(./.claude-pr/**)', 'Read(/${{ github.workspace }}/.claude-pr/**)', 'Read(/${{ github.workspace }}/.review-publish/**)', 'Read(~/.*)', 'Read(~/.*/**)', 'Read(/${{ runner.temp }}/_github_workflow/**)', 'Read(/${{ runner.temp }}/_github_home/**)']) assert.ok(deny.includes(t), t);
+  assert.ok(!deny.some((t) => t.includes('/home/runner')), 'no runner-specific home path');
   assert.match(review, /\*\*\)\$\{\{ steps\.facts\.outputs\.extra_deny \}\}"/, 'withheld denies are appended');
   assert.ok(!deny.includes('Edit'), 'no bare Edit deny (it would override the OUT allow rule)');
   for (const t of ['Write', 'Edit']) {
@@ -131,7 +132,7 @@ test('the distill model has the review sandbox and cannot write the snapshot app
   const ldeny = (/--disallowedTools "([^"]+)"/.exec(learn)?.[1] ?? '').split(',');
   assert.deepEqual(lallow, ['Read', 'Grep', 'Glob', 'Write(/${{ runner.temp }}/pr-review-learn/proposals.json)', 'Edit(/${{ runner.temp }}/pr-review-learn/proposals.json)']);
   assert.ok(ldeny.includes('Write(/${{ runner.temp }}/pr-review-learn/bundle/**)'));
-  for (const t of ['Bash', 'WebFetch', 'WebSearch', 'Read(//proc/**)', 'Read(/${{ github.workspace }}/.git/**)', 'Write(/${{ runner.temp }}/learn-snapshot/**)', 'Edit(/${{ runner.temp }}/learn-snapshot/**)', 'Write(/${{ github.workspace }}/**)']) assert.ok(ldeny.includes(t), t);
+  for (const t of ['Bash', 'WebFetch', 'WebSearch', 'Read(~/.*)', 'Read(~/.*/**)', 'Read(/${{ runner.temp }}/_github_home/**)', 'Read(//proc/**)', 'Read(/${{ github.workspace }}/.git/**)', 'Write(/${{ runner.temp }}/learn-snapshot/**)', 'Edit(/${{ runner.temp }}/learn-snapshot/**)', 'Write(/${{ github.workspace }}/**)']) assert.ok(ldeny.includes(t), t);
   assert.match(stepOf(learn, 'Distill'), /continue-on-error: true/);
   assert.ok(learn.indexOf('- name: Distill') < learn.indexOf('- name: Apply'));
 });

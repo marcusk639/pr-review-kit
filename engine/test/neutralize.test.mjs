@@ -26,6 +26,7 @@ function tree() {
   put('web/.rgignore', '*');
   put('.git/config', 'token');
   put('.review-base/CLAUDE.md', 'base copy');
+  put('.review-publish/CLAUDE.md', 'planted');
   put('src/ok.ts', 'fine');
   symlinkSync('/etc/hosts', join(root, 'src/link.ts'));
   symlinkSync(join(root, '.git'), join(root, 'gitlink'));
@@ -47,4 +48,5 @@ test('neutralize removes every PR-head instruction channel and symlink, and noth
   assert.ok(existsSync(join(root, '.claude/rules/x.md')), 'the root .claude is restored by the action; only settings are removed');
   assert.equal(readFileSync(join(root, 'src/ok.ts'), 'utf8'), 'fine');
   assert.equal(r.symlinks, 2);
+  assert.ok(existsSync(join(root, '.review-publish/CLAUDE.md.pr-head')), '.review-publish is PR content, neutralized');
 });

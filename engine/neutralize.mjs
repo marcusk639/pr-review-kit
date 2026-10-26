@@ -12,7 +12,9 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const INSTRUCTION_FILES = new Set(['CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.ignore', '.rgignore', '.mcp.json', '.claude.json']);
-const DEFAULT_SKIP = ['.git', '.review-base', '.review-publish'];
+// .review-base is the trust checkout (cloned fresh by the action); anything
+// else, .review-publish included, is PR content until replaced.
+const DEFAULT_SKIP = ['.git', '.review-base'];
 const PLACEHOLDER = 'pr-review: symlink removed from the PR head before review\n';
 
 const moveAside = (p) => {

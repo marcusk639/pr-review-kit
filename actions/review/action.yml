@@ -53,10 +53,12 @@ runs:
         if ! [[ "$TRUST_SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::pr-review: no base SHA"; exit 1; fi
         echo "trust_sha=$TRUST_SHA" >> "$GITHUB_OUTPUT"
 
-    # The PR head could ship its own .review-base/; never reuse it.
+    # The PR head could ship its own .review-base/, .review-publish/ or
+    # .pr-review-external/ (a link to anywhere, or instruction files): never
+    # reuse any of them.
     - name: Clear base checkout path
       shell: bash
-      run: rm -rf .review-base
+      run: rm -rf .review-base .review-publish .pr-review-external
 
     - name: Checkout trust SHA (project config, knowledge and checks)
       uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -135,4 +137,4 @@ runs:
           --strict-mcp-config
           --add-dir ${{ runner.temp }}/pr-review
           --allowedTools "Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/inline.json),Write(/${{ runner.temp }}/pr-review/findings.json),Write(/${{ runner.temp }}/pr-review/summary.md),Edit(/${{ runner.temp }}/pr-review/inline.json),Edit(/${{ runner.temp }}/pr-review/findings.json),Edit(/${{ runner.temp }}/pr-review/summary.md)"
-          --disallowedTools "Bash,MultiEdit,NotebookEdit,WebFetch,WebSearch,Skill,Task,Agent,mcp__github_inline_comment__create_inline_comment,mcp__github_inline_comment,mcp__github_comment,mcp__github_ci,mcp__github_file_ops,mcp__github,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Write(/${{ steps.paths.outputs.kit_root }}/**),Edit(/${{ steps.paths.outputs.kit_root }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Read(./.claude-pr/**),Read(/${{ github.workspace }}/.claude-pr/**),Read(/${{ github.workspace }}/.review-base/**),Read(//home/runner/.claude/**),Read(//home/runner/.config/**),Read(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/prstate-snapshot/**),Edit(/${{ runner.temp }}/prstate-snapshot/**),Write(/${{ runner.temp }}/pr-review/.claude/**),Edit(/${{ runner.temp }}/pr-review/.claude/**)${{ steps.facts.outputs.extra_deny }}"
+          --disallowedTools "Bash,MultiEdit,NotebookEdit,WebFetch,WebSearch,Skill,Task,Agent,mcp__github_inline_comment__create_inline_comment,mcp__github_inline_comment,mcp__github_comment,mcp__github_ci,mcp__github_file_ops,mcp__github,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Write(/${{ steps.paths.outputs.kit_root }}/**),Edit(/${{ steps.paths.outputs.kit_root }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Read(./.claude-pr/**),Read(/${{ github.workspace }}/.claude-pr/**),Read(/${{ github.workspace }}/.review-base/**),Read(/${{ github.workspace }}/.review-publish/**),Read(~/.*),Read(~/.*/**),Read(/${{ runner.temp }}/_github_workflow/**),Read(/${{ runner.temp }}/_github_home/**),Read(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/prstate-snapshot/**),Edit(/${{ runner.temp }}/prstate-snapshot/**),Write(/${{ runner.temp }}/pr-review/.claude/**),Edit(/${{ runner.temp }}/pr-review/.claude/**)${{ steps.facts.outputs.extra_deny }}"
