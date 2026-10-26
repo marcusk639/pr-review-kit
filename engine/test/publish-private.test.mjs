@@ -102,3 +102,11 @@ test('an earlier security entry does not claim private delivery on a channel tha
   setActiveProject(RP);
   assert.match(renderSummary({ state: { tier: 'full' }, findings: null, narrative: '', outcome: 'failure', ledger }), /reported earlier; details sent privately/);
 });
+
+test('the advisory line only promises pointers when security detail is withheld', async () => {
+  const { summary } = await run(PRIVATE);
+  assert.doesNotMatch(summary, /Security-relevant findings show only a pointer here/);
+  assert.match(summary, /_Advisory only: not a required check\._/);
+  const withheld = await run(PRIVATE, { collaborators: [{ login: 'guest' }] });
+  assert.match(withheld.summary, /Security-relevant findings show only a pointer here/);
+});

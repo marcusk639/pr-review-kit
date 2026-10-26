@@ -181,7 +181,7 @@ function assemble(head, groups, narrative, markerText, sections = []) {
   return `${text}\n\n${markerText}`;
 }
 
-const ADVISORY = '_Advisory only: not a required check. Security-relevant findings show only a pointer here._';
+const advisory = () => (activeProject().privateVerified ? '_Advisory only: not a required check._' : '_Advisory only: not a required check. Security-relevant findings show only a pointer here._');
 const FEEDBACK = '_Feedback: React 👍/👎 on an inline comment, or reply `F-…` 👍/👎 with a reason in a PR comment (e.g. `F-1a2b3c 👎 intentional: …`). Only maintainers\' feedback counts._';
 
 // Failure keeps the last completed review's open findings; tier "none" (no
@@ -211,7 +211,7 @@ export function renderSummary({ state, findings, narrative, outcome, ledger, rea
   // An oversized raw marker is dropped for an encoded (sanitized) ledger.
   const raw = rawMarker && rawMarker.length <= MAX_MARKER ? rawMarker : null;
   const markerText = raw ?? encodeLedger(fitMarker(ledger, encodeLedger, MAX_MARKER));
-  if (outcome === 'none') return renderPrior(ledger, markerText, `${clean(note, 200)}\n\n${ADVISORY}`, true, notices, Boolean(raw));
+  if (outcome === 'none') return renderPrior(ledger, markerText, `${clean(note, 200)}\n\n${advisory()}`, true, notices, Boolean(raw));
   const ok = outcome === 'success' && findings && Array.isArray(findings.findings);
   if (!ok) return renderPrior(ledger, markerText, `> ⚠ review did not complete (${reason}) — will retry on next push`, false, notices, Boolean(raw));
   const list = findings.findings;
@@ -221,7 +221,7 @@ export function renderSummary({ state, findings, narrative, outcome, ledger, rea
     '## PR review (advisory)',
     headline(sha, state?.tier, list, carried, Boolean(raw), partial),
     tierLine(state),
-    ADVISORY,
+    advisory(),
     FEEDBACK,
     ...notices,
   ].join('\n\n');
