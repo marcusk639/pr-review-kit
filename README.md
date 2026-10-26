@@ -2,7 +2,7 @@
 
 The shared engine for a repo-aware, advisory PR reviewer on `anthropics/claude-code-action@v1`, extracted from
 `marcusk639/recovery-platform`. It comments, never approves or blocks. Each consuming repository keeps its own
-knowledge, config and checks under `.claude/pr-review/`; the kit holds everything that is the same everywhere.
+knowledge, config and checks under `.pr-review/`; the kit holds everything that is the same everywhere.
 
 - **Design and decisions:** [docs/design.md](docs/design.md)
 - **Wiring a repository:** [docs/consumer-guide.md](docs/consumer-guide.md), starting from `examples/consumer/`
