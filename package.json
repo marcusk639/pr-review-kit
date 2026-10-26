@@ -1,0 +1,10 @@
+{
+  "name": "pr-review-kit",
+  "private": true,
+  "type": "module",
+  "description": "Shared engine for the repo-aware, advisory PR reviewer (Node built-ins only).",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test \"engine/test/*.test.mjs\" \"examples/recovery-platform/checks/test/*.test.mjs\""
+  }
+}

@@ -1,0 +1,288 @@
+[
+  {
+    "linkType": "callable",
+    "paths": [
+      "*/functions/src/callable/**",
+      "*/functions/src/index.ts",
+      "*/functions/src/init.ts",
+      "recovery-api/src/callable/**",
+      "recovery-api/src/index.ts"
+    ],
+    "counterparts": [
+      "*/mobile/src/**",
+      "*/web/src/**",
+      "homegroups/mobile/App.tsx",
+      "regroup/mobile/App.tsx",
+      "regroup/mobile/firebase-setup.ts"
+    ],
+    "classes": [1, 2, 3, 4, 6, 9, 12]
+  },
+  {
+    "linkType": "firestore-rules",
+    "paths": ["homegroups/firestore.rules", "regroup/mobile/firebase/firestore.rules"],
+    "counterparts": [
+      "*/mobile/src/**",
+      "*/web/src/**",
+      "*/functions/src/**",
+      "regroup/mobile/firebase/__tests__/firestore.rules.test.ts",
+      "homegroups/functions/src/tests/**"
+    ],
+    "classes": [5, 7]
+  },
+  {
+    "linkType": "firestore-indexes",
+    "paths": ["homegroups/firestore.indexes.json", "regroup/mobile/firebase/firestore.indexes.json", "recovery-api/firestore.indexes.json"],
+    "counterparts": ["*/mobile/src/**", "*/web/src/**", "*/functions/src/**", "recovery-api/src/**"],
+    "classes": [5, 7]
+  },
+  {
+    "linkType": "firestore-trigger",
+    "paths": ["*/functions/src/triggers/**", "recovery-api/src/triggers/**"],
+    "counterparts": [
+      "*/mobile/src/**",
+      "*/web/src/**",
+      "homegroups/firestore.rules",
+      "regroup/mobile/firebase/firestore.rules",
+      "*/functions/src/entities/**"
+    ],
+    "classes": [1, 2, 9, 12]
+  },
+  {
+    "linkType": "storage",
+    "paths": ["homegroups/storage.rules", "regroup/mobile/firebase/storage.rules"],
+    "counterparts": [
+      "*/mobile/src/**",
+      "*/web/src/**",
+      "*/functions/src/**",
+      "regroup/mobile/firebase/__tests__/storage.rules.test.ts",
+      "homegroups/functions/src/tests/**"
+    ],
+    "classes": [5, 7]
+  },
+  {
+    "linkType": "claims",
+    "paths": [
+      "homegroups/functions/src/utils/claims.ts",
+      "regroup/functions/src/util/claims.ts",
+      "homegroups/functions/src/triggers/**",
+      "regroup/functions/src/callable/invitations.ts",
+      "regroup/functions/src/callable/auth.ts"
+    ],
+    "counterparts": [
+      "homegroups/firestore.rules",
+      "homegroups/storage.rules",
+      "regroup/mobile/firebase/firestore.rules",
+      "regroup/mobile/firebase/storage.rules",
+      "*/mobile/src/**",
+      "regroup/web/src/app/services/**"
+    ],
+    "classes": [1, 7]
+  },
+  {
+    "linkType": "push",
+    "paths": [
+      "homegroups/functions/src/callable/**",
+      "regroup/functions/src/util/notif*",
+      "regroup/functions/src/scheduled/**",
+      "homegroups/functions/src/triggers/**",
+      "homegroups/mobile/src/services/notifications/**",
+      "regroup/mobile/src/services/notifications/**",
+      "regroup/mobile/src/screens/Splash/Splash.tsx"
+    ],
+    "counterparts": [
+      "homegroups/mobile/src/services/notifications/NotificationHandler.ts",
+      "regroup/mobile/src/screens/Splash/Splash.tsx",
+      "regroup/mobile/src/services/notifications/**",
+      "*/functions/src/triggers/**",
+      "*/functions/src/scheduled/**"
+    ],
+    "classes": [9, 11]
+  },
+  {
+    "linkType": "deep-link",
+    "paths": [
+      "homegroups/mobile/src/utils/url.ts",
+      "homegroups/mobile/App.tsx",
+      "homegroups/mobile/ios/**/Info.plist",
+      "homegroups/mobile/android/**/AndroidManifest.xml",
+      "homegroups/web/public/.well-known/**",
+      "homegroups/web/src/lib/deepLinks.js",
+      "regroup/mobile/src/services/native-deep-links.ts",
+      "regroup/mobile/apple-app-site-association",
+      "regroup/mobile/.well-known/**",
+      "regroup/mobile/ios/**/Info.plist",
+      "regroup/mobile/android/**/AndroidManifest.xml",
+      "regroup/web/src/app/components/redirect/**"
+    ],
+    "counterparts": [
+      "*/functions/src/**",
+      "*/web/src/**",
+      "homegroups/mobile/src/utils/url.ts",
+      "homegroups/mobile/App.tsx",
+      "regroup/mobile/src/services/native-deep-links.ts"
+    ],
+    "classes": [11]
+  },
+  {
+    "linkType": "origins-config",
+    "paths": [
+      "homegroups/functions/src/utils/appConfig.ts",
+      "homegroups/web/src/lib/deepLinks.js",
+      "regroup/functions/src/validation/index.ts",
+      "regroup/functions/src/util/connectUrls.ts",
+      "regroup/functions/src/config.ts",
+      "regroup/e2e/launch-config.json",
+      "regroup/web/firebase.json"
+    ],
+    "counterparts": [
+      "regroup/e2e/launch-config.json",
+      "regroup/web/firebase.json",
+      "regroup/functions/src/validation/index.ts",
+      "regroup/functions/src/util/connectUrls.ts",
+      "homegroups/functions/src/callable/**",
+      "regroup/functions/src/callable/**",
+      "*/mobile/src/**",
+      "*/web/src/**"
+    ],
+    "classes": [11]
+  },
+  {
+    "linkType": "http-export",
+    "paths": [
+      "*/functions/src/http/**",
+      "regroup/functions/src/webhooks/**",
+      "regroup/functions/src/scheduled/**",
+      "homegroups/functions/src/api/**"
+    ],
+    "counterparts": [
+      "regroup/web/firebase.json",
+      "regroup/e2e/launch-config.json",
+      "regroup/functions/src/util/connectUrls.ts",
+      "regroup/functions/package.json",
+      "homegroups/mobile/src/**",
+      "regroup/mobile/src/**"
+    ],
+    "classes": [1, 2, 3, 4, 9, 12]
+  },
+  {
+    "linkType": "recovery-api",
+    "paths": [
+      "recovery-api/src/**",
+      "*/functions/src/api/recoveryApi.ts",
+      "homegroups/functions/src/callable/findMeetings.ts",
+      "regroup/functions/src/callable/meetings.ts",
+      "*/functions/src/*/directoryMapping.ts",
+      "detox-recovery/app/api/**"
+    ],
+    "counterparts": [
+      "recovery-api/src/config/apps.ts",
+      "recovery-api/src/middleware/**",
+      "recovery-api/src/callable/**",
+      "*/functions/src/api/recoveryApi.ts",
+      "*/functions/src/*/directoryMapping.ts",
+      "*/functions/src/entities/Directory*",
+      "detox-recovery/app/api/contact/route.ts",
+      "detox-recovery/apphosting.yaml"
+    ],
+    "classes": [1, 14]
+  },
+  {
+    "linkType": "shared-literals",
+    "paths": [
+      "*/functions/src/entities/**",
+      "homegroups/mobile/src/types/**",
+      "regroup/mobile/src/entities/**",
+      "regroup/web/src/app/entities/**",
+      "regroup/functions/src/validation/**",
+      "regroup/mobile/src/hooks/useSubscriptionGate.ts",
+      "regroup/mobile/src/util/subscription.ts",
+      "regroup/functions/src/util/entitlement.ts"
+    ],
+    "counterparts": [
+      "*/functions/src/entities/**",
+      "homegroups/mobile/src/types/**",
+      "regroup/mobile/src/entities/**",
+      "regroup/web/src/app/entities/**",
+      "regroup/functions/src/validation/**",
+      "regroup/functions/src/util/entitlement.ts",
+      "regroup/mobile/src/hooks/useSubscriptionGate.ts",
+      "regroup/mobile/src/util/subscription.ts"
+    ],
+    "classes": [3, 4]
+  },
+  {
+    "linkType": "twin-helper",
+    "paths": [
+      "homegroups/functions/src/utils/**",
+      "regroup/functions/src/util/**",
+      "*/functions/src/api/recoveryApi.ts"
+    ],
+    "counterparts": [
+      "homegroups/functions/src/utils/**",
+      "regroup/functions/src/util/**",
+      "recovery-api/src/lib/meetings/**"
+    ],
+    "classes": [9]
+  },
+  {
+    "linkType": "config-coupling",
+    "paths": [
+      "*/firebase.json",
+      "*/.firebaserc",
+      "*/functions/package.json",
+      "*/functions/.env.example",
+      "*/mobile/.env.example",
+      "regroup/mobile/firebase/firebase.json",
+      "detox-recovery/apphosting.yaml",
+      "detox-recovery/env.example",
+      "recovery-api/firebase.json",
+      "recovery-api/.firebaserc",
+      ".github/workflows/ci.yml",
+      "scripts/**"
+    ],
+    "counterparts": [
+      "*/firebase.json",
+      "*/.firebaserc",
+      "*/functions/package.json",
+      "*/functions/.env.example",
+      "detox-recovery/apphosting.yaml",
+      ".github/workflows/ci.yml",
+      "scripts/**",
+      "docs/launch-readiness/**"
+    ],
+    "classes": [11]
+  },
+  {
+    "linkType": "logging",
+    "paths": [
+      "regroup/mobile/src/util/logging.ts",
+      "regroup/mobile/src/util/simple-debug-logger.ts",
+      "**/logger.ts",
+      "**/logging.ts"
+    ],
+    "counterparts": ["*/functions/src/**", "*/mobile/src/**", "*/web/src/**", "detox-recovery/app/**"],
+    "classes": [8]
+  },
+  {
+    "linkType": "tests",
+    "paths": [
+      "**/__tests__/**",
+      "**/*.test.ts",
+      "**/*.test.tsx",
+      "**/*.test.js",
+      "**/*.test.mjs",
+      "**/*.spec.ts",
+      "regroup/e2e/**",
+      "e2e-maestro/**",
+      "**/maestro/**"
+    ],
+    "counterparts": ["*/functions/src/**", "*/mobile/src/**", "*/web/src/**", "recovery-api/src/**"],
+    "classes": [10]
+  },
+  {
+    "linkType": "review-config",
+    "paths": [".github/workflows/claude-code-review.yml", ".claude/pr-review/**"],
+    "counterparts": [".github/workflows/claude-code-review.yml", ".claude/pr-review/**"],
+    "classes": []
+  }
+]
