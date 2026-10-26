@@ -23,7 +23,7 @@ function renderFact(f) {
 }
 
 function renderResult(r) {
-  if (r.error) return `- pre-check unavailable: ${r.check}`;
+  if (r.error) return `- pre-check unavailable: ${r.check}${r.timeout ? ' (timeout)' : ''}`;
   const facts = r.facts ?? [];
   const lines = facts.slice(0, MAX_PER_CHECK).map(renderFact);
   if (facts.length > MAX_PER_CHECK) lines.push(`- [${r.check}] ... ${facts.length - MAX_PER_CHECK} more omitted`);

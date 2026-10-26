@@ -58,7 +58,7 @@ function narrowsSecurity(c, rule, config) {
 function validate(p, c, config) {
   if (!c) return 'proposal cites no known feedback';
   if (p.unresolved) return `ambiguous: ${redact(String(p.unresolved)).slice(0, 200)}`;
-  if (!config.knowledge.includes(p.target) || config.learning.forbidden.includes(p.target)) return 'target is not a configured knowledge file the learning loop may edit';
+  if (!config.knowledge.includes(p.target) || config.learning.forbidden.some((g) => g === p.target || matches(p.target, g))) return 'target is not a configured knowledge file the learning loop may edit';
   const rule = typeof p.rule === 'string' ? p.rule.trim() : '';
   if (!rule || rule.length > MAX_RULE) return 'rule missing or too long';
   if (instructionShaped(rule)) return 'instruction-shaped rule';

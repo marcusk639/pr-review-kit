@@ -8,13 +8,14 @@ import { PROJECT_SUBDIR, loadProject } from './lib/config.mjs';
 import { fileURLToPath } from 'node:url';
 import { validateLearnWorkflow } from './learn/validate-learn.mjs';
 import { checkKitPin, checkWorkflow } from './lib/workflow-check.mjs';
+import { matches } from './lib/glob.mjs';
 
 const PATH_RE = /^[\w.-]+\/[\w./ -]+\.\w+(:\d+(-\d+)?)?$/;
 const KIT_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 const read = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : null);
 
-function checkKnowledge(root, project, errors) {
+function checkKnowledge(root, project, errors, warnings) {
   const dir = join(root, PROJECT_SUBDIR);
   const { config } = project;
   if (!existsSync(join(dir, 'REVIEW.md'))) errors.push('.pr-review/REVIEW.md (the project addendum) is missing');
@@ -39,7 +40,13 @@ function checkKnowledge(root, project, errors) {
       if (!existsSync(join(root, path)) && !existsSync(join(dir, path))) errors.push(`${name}: ${path} does not exist`);
     }
   }
-  for (const rel of config.checks.project) if (!existsSync(join(dir, rel))) errors.push(`project check ${rel} is missing`);
+  for (const rel of config.checks.project) {
+    const src = read(join(dir, rel));
+    if (src == null) errors.push(`project check ${rel} is missing`);
+    // Checks run token-free in a child; spawning from one would reintroduce the PR-code risk.
+    else if (/(['"`])(node:)?child_process\1/.test(src)) errors.push(`${rel} imports child_process; use ctx.git or ctx.parseOnly`);
+  }
+  for (const g of config.learning.forbidden) if (/[*?]/.test(g) && !config.knowledge.some((k) => matches(k, g))) warnings.push(`learning.forbidden ${g} matches no knowledge file`);
 }
 
 function checkReviewWorkflow(root, project, errors, warnings, kitDir) {
@@ -63,7 +70,7 @@ export function validateRepo(root, { workflow, kitDir = KIT_ROOT } = {}) {
   const project = loadProject(join(root, PROJECT_SUBDIR));
   errors.push(...project.errors.map((e) => `config: ${e}`));
   if (workflow) project.config.workflowPath = workflow;
-  checkKnowledge(root, project, errors);
+  checkKnowledge(root, project, errors, warnings);
   checkReviewWorkflow(root, project, errors, warnings, kitDir);
   validateLearnWorkflow(root, project, { errors, warnings });
   return { errors, warnings };

@@ -46,7 +46,7 @@ export function secretPatterns(config = activeProject().config) {
 // PR_REVIEW_REDACT_TERMS (newline-separated, from a secret): literal terms such
 // as a tenant name that must never appear in posted or committed text. Set only
 // in the facts, publish and learn steps; never in config, never to the model.
-function terms(env = process.env) {
+export function terms(env = process.env) {
   return String(env.PR_REVIEW_REDACT_TERMS ?? '')
     .split('\n')
     .map((t) => t.trim())

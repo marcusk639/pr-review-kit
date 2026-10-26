@@ -12,7 +12,10 @@ import {
   checkCollectionsVsRules,
   checkTwins,
   TWIN_PAIRS,
+  useGit,
 } from '../contracts.mjs';
+
+useGit((args, cwd) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
 
 let root;
 

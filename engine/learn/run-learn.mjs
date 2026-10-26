@@ -19,7 +19,7 @@ import { mergePrecision, readPrecision, renderPrecision } from './precision.mjs'
 import { renderKnowledge, renderPrBody } from './render.mjs';
 import { runLearnCommands } from './commands.mjs';
 import { closedLearningSources } from './closed.mjs';
-import { redact } from '../lib/redact.mjs';
+import { redact, terms } from '../lib/redact.mjs';
 
 const ENGINE = dirname(dirname(fileURLToPath(import.meta.url)));
 const json = (v) => `${JSON.stringify(v, null, 2)}\n`;
@@ -68,7 +68,10 @@ export function finishLearn({ project, root, out, snapshot, files, today, distil
   const before = lessonsOf(dir);
   const rejected = Array.isArray(snap.rejectedSources) ? snap.rejectedSources : [];
   if (rejected.length) notes.push(`${rejected.length} feedback source(s) from closed learning PRs are treated as rejected and not proposed again`);
-  const result = applyProposals({ lessons: before, consumed: [...consumedOf(dir), ...rejected], candidates: snap.candidates, proposals: proposalsFor(distill, out, snap.candidates, config, notes), config, files, today });
+  const proposals = proposalsFor(distill, out, snap.candidates, config, notes);
+  const rawText = [...proposals.map((p) => String(p?.rule ?? '')), ...snap.candidates.map((c) => String(c.text ?? ''))].join('\n').toLowerCase();
+  const hasTerm = terms().length > 0 && (rawText.includes('[redacted]') || terms().some((t) => rawText.includes(t.toLowerCase())));
+  const result = applyProposals({ lessons: before, consumed: [...consumedOf(dir), ...rejected], candidates: snap.candidates, proposals, config, files, today });
   // Held security lessons are committed without their text: security detail
   // only ever travels through the private channel.
   for (const l of result.lessons) if (l.status === 'needs-decision' && /security/.test(l.why ?? '')) l.rule = '(withheld: see the sources)';
@@ -84,7 +87,13 @@ export function finishLearn({ project, root, out, snapshot, files, today, distil
   let changed = Object.entries(proposed).filter(([, [, c]]) => c).map(([p]) => p);
   const cmd = changed.length ? runLearnCommands({ root, proposed: Object.fromEntries(changed.map((p) => [p, proposed[p][0]])), commands: config.learning.commands }) : { ok: true, texts: {}, results: [] };
   for (const [p, t] of Object.entries(cmd.texts)) proposed[p][0] = t;
-  if (!cmd.ok) {
+  // A rule carrying a redaction term must not be proposed at all (CI greps
+  // tracked files for it); the message never names the term.
+  const lowered = Object.values(proposed).map(([t]) => t.toLowerCase());
+  if (changed.length && (hasTerm || terms().some((t) => lowered.some((x) => x.includes(t.toLowerCase()))))) {
+    notes.push('a lesson contains a redacted term; nothing is proposed this run');
+    changed = [];
+  } else if (!cmd.ok) {
     const failed = cmd.results.find((r) => !r.ok);
     notes.push(`the ${failed.kind} command \`${failed.command}\` failed on the proposed files; nothing is proposed this run`);
     changed = [];

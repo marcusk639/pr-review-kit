@@ -137,8 +137,10 @@ export function runVerifyDiff(baseSha, repoRoot, scriptPath, headSha) {
     }
   }
   try {
+    // Base-branch script, but run without any inherited token or secret.
     execFileSync('bash', [script, since], {
       cwd: repoRoot,
+      env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: repoRoot, GIT_CONFIG_NOSYSTEM: '1' },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 60000,

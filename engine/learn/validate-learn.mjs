@@ -24,6 +24,9 @@ export function validateLearnWorkflow(root, project, { errors }) {
   const reviewSha = /pr-review-kit\/actions\/review@(\S+)/.exec(review)?.[1];
   if (sha && reviewSha && sha !== reviewSha) errors.push('the learning workflow must pin the same kit SHA as the review workflow');
   if (/pull_request/.test(wf)) errors.push('the learning workflow must not run on pull_request events (memory changes land only through its own PR)');
+  for (const step of r.steps.filter((x) => /uses:\s*actions\/checkout@/.test(x))) {
+    if (!/ref:\s*\$\{\{\s*github\.event\.repository\.default_branch\s*\}\}/.test(step)) errors.push('learning workflow: every checkout needs ref: ${{ github.event.repository.default_branch }}');
+  }
   for (const job of jobsOf(wf)) {
     if (/pr-review-kit\/actions\/learn@/.test(job) && /^\s+[\w-]+: write\s*$/m.test(job.replace(/^\s+id-token: write\s*$/m, ''))) errors.push('the learn job must not have write permissions (it runs the model)');
     if (/pr-review-kit\/actions\/propose@/.test(job) && /secrets\./.test(job)) errors.push('the propose job must not receive secrets');

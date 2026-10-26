@@ -66,3 +66,27 @@ test('no feedback and nothing stale means no changes', () => {
   const r = finishLearn({ project: project(), root, out, snapshot: snap, files, today: '2026-10-26', distill: 'deterministic' });
   assert.equal(r.manifest.hasChanges, false);
 });
+
+test('anything the model wrote into OUT/bundle is discarded; the bundle is rebuilt from validated state', () => {
+  prepareLearn({ project: project(), records: [rec()], recordsByPr: { 12: [rec()] }, out, snapshot: snap });
+  mkdirSync(join(out, 'bundle/.github/workflows'), { recursive: true });
+  writeFileSync(join(out, 'bundle/.github/workflows/evil.yml'), 'x');
+  writeFileSync(join(out, 'bundle/manifest.json'), JSON.stringify({ hasChanges: true, files: ['.github/workflows/evil.yml'] }));
+  finishLearn({ project: project(), root, out, snapshot: snap, files, today: '2026-10-26', distill: 'deterministic' });
+  assert.ok(!existsSync(join(out, 'bundle/.github/workflows/evil.yml')));
+  const manifest = JSON.parse(readFileSync(join(out, 'bundle/manifest.json'), 'utf8'));
+  assert.ok(manifest.files.every((f) => f.startsWith('.pr-review/')));
+});
+
+test('a lesson containing a redaction term rejects the whole proposal, without naming the term', () => {
+  process.env.PR_REVIEW_REDACT_TERMS = 'AcmeTenant';
+  try {
+    prepareLearn({ project: project(), records: [rec({ id: '77:x:y', text: 'Intentional for AcmeTenant only.' })], recordsByPr: {}, out, snapshot: snap });
+    const r = finishLearn({ project: project(), root, out, snapshot: snap, files, today: '2026-10-26', distill: 'deterministic' });
+    assert.equal(r.manifest.hasChanges, false);
+    assert.match(r.body, /a lesson contains a redacted term; nothing is proposed this run/);
+    assert.doesNotMatch(r.body, /AcmeTenant/i);
+  } finally {
+    delete process.env.PR_REVIEW_REDACT_TERMS;
+  }
+});

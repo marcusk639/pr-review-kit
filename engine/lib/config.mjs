@@ -45,6 +45,7 @@ export const DEFAULTS = Object.freeze({
     verifyDiff: false,
     writeCollaborators: false,
     project: [],
+    timeoutMs: 20000,
   },
   trust: { contextAssociations: ['OWNER', 'MEMBER', 'COLLABORATOR'], feedbackAuthors: ['repository-owner'] },
   learning: { windowDays: 45, repeatThreshold: 2, maxLessons: 40, demote: { minVotes: 5, maxPrecision: 0.4 }, distill: 'model', branch: 'pr-review/learning', forbidden: [], commands: { format: [], validate: [] } },
@@ -103,6 +104,7 @@ const SCHEMA = obj({
     verifyDiff: orFalse(obj({ script: str })),
     writeCollaborators: orFalse(obj({ allowed: strList })),
     project: strList,
+    timeoutMs: int(100, 120000),
   }),
   trust: obj({ contextAssociations: strList, feedbackAuthors: strList }),
   learning: obj({
@@ -136,6 +138,7 @@ export function normalizeConfig(raw) {
   if (c.securityChannel === 'advisory' && c.visibility !== 'public') errors.push('securityChannel advisory requires visibility public (advisories are public-repo only)');
   if (!BRANCH_RE.test(c.learning.branch) || PROTECTED_BRANCHES.has(c.learning.branch)) errors.push('learning.branch must be a dedicated branch name, not a default branch');
   checkClasses(c.classes, errors);
+  for (const f of c.learning.forbidden) if (!/[*?]/.test(f) && !c.knowledge.includes(f)) errors.push(`learning.forbidden: ${f} is neither a glob nor a knowledge file (names are relative to .pr-review/)`);
   return { config: c, errors };
 }
 

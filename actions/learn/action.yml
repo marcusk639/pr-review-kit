@@ -29,6 +29,17 @@ outputs:
 runs:
   using: composite
   steps:
+    # Only the default branch's config may drive this job: a dispatch from any
+    # other branch fails here, before anything reads it.
+    - name: Default branch only
+      shell: bash
+      env:
+        REF: ${{ github.ref }}
+        DEFAULT: ${{ github.event.repository.default_branch }}
+      run: |
+        if [ -z "$DEFAULT" ] || [ "$REF" != "refs/heads/$DEFAULT" ]; then echo "::error::pr-review learning runs only on the default branch"; exit 1; fi
+        if [ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" != "$DEFAULT" ]; then echo "::error::pr-review learning: check out the default branch (ref: github.event.repository.default_branch)"; exit 1; fi
+
     - name: Run start
       id: paths
       shell: bash
@@ -68,8 +79,8 @@ runs:
           --setting-sources user
           --strict-mcp-config
           --add-dir ${{ runner.temp }}/pr-review-learn
-          --allowedTools "Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review-learn/**),Edit(/${{ runner.temp }}/pr-review-learn/**)"
-          --disallowedTools "Bash,MultiEdit,NotebookEdit,WebFetch,WebSearch,Skill,Task,Agent,mcp__github_inline_comment,mcp__github_comment,mcp__github_ci,mcp__github_file_ops,mcp__github,Read(/${{ github.workspace }}/.claude-pr/**),Read(//home/runner/.claude/**),Read(//home/runner/.config/**),Read(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Write(/${{ steps.paths.outputs.kit_root }}/**),Edit(/${{ steps.paths.outputs.kit_root }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/learn-snapshot/**),Edit(/${{ runner.temp }}/learn-snapshot/**)"
+          --allowedTools "Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review-learn/proposals.json),Edit(/${{ runner.temp }}/pr-review-learn/proposals.json)"
+          --disallowedTools "Bash,MultiEdit,NotebookEdit,WebFetch,WebSearch,Skill,Task,Agent,mcp__github_inline_comment,mcp__github_comment,mcp__github_ci,mcp__github_file_ops,mcp__github,Read(/${{ github.workspace }}/.claude-pr/**),Read(//home/runner/.claude/**),Read(//home/runner/.config/**),Read(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Write(/${{ steps.paths.outputs.kit_root }}/**),Edit(/${{ steps.paths.outputs.kit_root }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/learn-snapshot/**),Edit(/${{ runner.temp }}/learn-snapshot/**),Write(/${{ runner.temp }}/pr-review-learn/.claude/**),Edit(/${{ runner.temp }}/pr-review-learn/.claude/**),Write(/${{ runner.temp }}/pr-review-learn/bundle/**),Edit(/${{ runner.temp }}/pr-review-learn/bundle/**)"
 
     - name: Apply
       shell: bash

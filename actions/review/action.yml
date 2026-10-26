@@ -70,21 +70,9 @@ runs:
       with:
         node-version: "22"
 
-    - name: Facts
-      id: facts
-      shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-        REPO: ${{ github.repository }}
-        PR: ${{ github.event.pull_request.number }}
-        BASE_SHA: ${{ steps.paths.outputs.trust_sha }}
-        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        PR_TITLE: ${{ github.event.pull_request.title }}
-        PR_REVIEW_BASE: .review-base
-        PR_REVIEW_REDACT_TERMS: ${{ inputs.redact_terms }}
-      run: node "${{ steps.paths.outputs.kit_root }}/engine/facts.mjs"
-
-    # The model reads .pr-review/ from the working tree: replace the PR head's
+    # Neutralize first (below), so facts and project checks never see PR-head
+    # symlinks or instruction files. The model reads .pr-review/ from the
+    # working tree: replace the PR head's
     # copy with the trust SHA's. claude-code-action restores .claude/ (from the
     # base branch tip) but never touches .pr-review/, so this copy is what the
     # model sees. .claude-pr/ (the action's snapshot of the PR head's sensitive
@@ -99,6 +87,20 @@ runs:
       shell: bash
       run: node "${{ steps.paths.outputs.kit_root }}/engine/neutralize.mjs" .
 
+    - name: Facts
+      id: facts
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+        BASE_SHA: ${{ steps.paths.outputs.trust_sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        PR_REVIEW_BASE: .review-base
+        PR_REVIEW_REDACT_TERMS: ${{ inputs.redact_terms }}
+      run: node "${{ steps.paths.outputs.kit_root }}/engine/facts.mjs"
+
     - name: External counterparts
       if: steps.facts.outputs.tier != '' && steps.facts.outputs.tier != 'none'
       shell: bash
@@ -107,7 +109,9 @@ runs:
       run: node "${{ steps.paths.outputs.kit_root }}/engine/externals.mjs"
 
     # No shell for the model: facts wrote the diff, commit list and procedure
-    # into OUT. --setting-sources user: no project CLAUDE.md, rules, skills or
+    # into OUT. The model may write only its three output files (OUT is an
+    # --add-dir, which Claude Code would otherwise read .claude/ config from).
+    # --setting-sources user: no project CLAUDE.md, rules, skills or
     # settings (the settings input lands in the user settings, so hooks stay
     # off). Write/Edit only under OUT; denied in the workspace, on this kit, on
     # the runner's command files and the state snapshot. Reads of .git,
@@ -130,5 +134,5 @@ runs:
           --setting-sources user
           --strict-mcp-config
           --add-dir ${{ runner.temp }}/pr-review
-          --allowedTools "Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)"
-          --disallowedTools "Bash,MultiEdit,NotebookEdit,WebFetch,WebSearch,Skill,Task,Agent,mcp__github_inline_comment__create_inline_comment,mcp__github_inline_comment,mcp__github_comment,mcp__github_ci,mcp__github_file_ops,mcp__github,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Write(/${{ steps.paths.outputs.kit_root }}/**),Edit(/${{ steps.paths.outputs.kit_root }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Read(./.claude-pr/**),Read(/${{ github.workspace }}/.claude-pr/**),Read(/${{ github.workspace }}/.review-base/**),Read(//home/runner/.claude/**),Read(//home/runner/.config/**),Read(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/prstate-snapshot/**),Edit(/${{ runner.temp }}/prstate-snapshot/**)${{ steps.facts.outputs.extra_deny }}"
+          --allowedTools "Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/inline.json),Write(/${{ runner.temp }}/pr-review/findings.json),Write(/${{ runner.temp }}/pr-review/summary.md),Edit(/${{ runner.temp }}/pr-review/inline.json),Edit(/${{ runner.temp }}/pr-review/findings.json),Edit(/${{ runner.temp }}/pr-review/summary.md)"
+          --disallowedTools "Bash,MultiEdit,NotebookEdit,WebFetch,WebSearch,Skill,Task,Agent,mcp__github_inline_comment__create_inline_comment,mcp__github_inline_comment,mcp__github_comment,mcp__github_ci,mcp__github_file_ops,mcp__github,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Write(/${{ steps.paths.outputs.kit_root }}/**),Edit(/${{ steps.paths.outputs.kit_root }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Read(./.claude-pr/**),Read(/${{ github.workspace }}/.claude-pr/**),Read(/${{ github.workspace }}/.review-base/**),Read(//home/runner/.claude/**),Read(//home/runner/.config/**),Read(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/prstate-snapshot/**),Edit(/${{ runner.temp }}/prstate-snapshot/**),Write(/${{ runner.temp }}/pr-review/.claude/**),Edit(/${{ runner.temp }}/pr-review/.claude/**)${{ steps.facts.outputs.extra_deny }}"

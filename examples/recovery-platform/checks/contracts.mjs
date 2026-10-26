@@ -1,6 +1,11 @@
-import { execFileSync } from 'node:child_process';
-
-const git = (args, cwd) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+// git comes from the kit's check context (ctx.git: git -C <repo>, no token);
+// checks never spawn processes themselves.
+let gitFn = () => {
+  throw new Error('ctx.git not set');
+};
+export const useGit = (fn) => {
+  gitFn = fn;
+};
 export {
   checkQueriesVsIndexes,
   checkStoragePaths,
@@ -36,7 +41,7 @@ const CLIENT_SPECS = [':(glob)*/mobile/src/**', ':(glob)*/web/src/**', 'homegrou
 
 function clientHits(name, repoRoot) {
   try {
-    return git(['grep', '-l', '-w', '-F', '-e', name, '--', ...CLIENT_SPECS], repoRoot)
+    return gitFn(['grep', '-l', '-w', '-F', '-e', name, '--', ...CLIENT_SPECS], repoRoot)
       .split('\n')
       .filter(Boolean);
   } catch (err) {

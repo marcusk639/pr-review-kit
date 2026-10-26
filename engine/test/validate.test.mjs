@@ -109,3 +109,15 @@ test('the learning job must not hold a write token; the propose job holds no sec
 test('the learning workflow pins the same kit SHA as the review workflow', () => {
   assert.match(errorsOf(repo(({ sub }) => sub(LWF, `learn@${SHA}`, `learn@${'c'.repeat(40)}`))), /learning workflow must pin the same kit SHA as the review workflow/);
 });
+
+test('project checks may not spawn processes themselves', () => {
+  const dir = repo(({ at }) => writeFileSync(at('.pr-review/checks/routes.mjs'), "import { execFileSync } from 'node:child_process';\nexport default [];\n"));
+  assert.match(errorsOf(dir), /checks\/routes\.mjs imports child_process; use ctx\.git or ctx\.parseOnly/);
+  const dyn = repo(({ at }) => writeFileSync(at('.pr-review/checks/routes.mjs'), "const cp = await import('child_process');\nexport default [];\n"));
+  assert.match(errorsOf(dyn), /imports child_process/);
+});
+
+test('a forbidden glob that matches no knowledge file is a warning', () => {
+  const dir = repo(({ sub }) => sub('.pr-review/config.json', '"distill": "model"', '"distill": "model", "forbidden": ["maps/**"]'));
+  assert.match(validateRepo(dir, { kitDir: false }).warnings.join(), /learning\.forbidden maps\/\*\* matches no knowledge file/);
+});

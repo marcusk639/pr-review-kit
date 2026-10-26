@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RP } from './helpers/rp.mjs';
 import { setActiveProject } from '../lib/config.mjs';
-import { loadProjectChecks, runProjectChecks } from '../lib/project-checks.mjs';
+import { resolveProjectChecks, runProjectChecks } from '../lib/project-checks.mjs';
 import { buildFacts } from '../facts.mjs';
 
 const FACTS = fileURLToPath(new URL('../facts.mjs', import.meta.url));
@@ -27,16 +27,15 @@ after(() => {
 });
 afterEach(() => setActiveProject(RP));
 
-test('project checks load only from inside the project directory', async () => {
+test('project check modules resolve only inside the project directory', () => {
   const dir = join(tmp, 'p1');
-  write(join(dir, 'checks/ok.mjs'), "export default [{ name: 'ok-check', run: () => [{ check: 'ok-check', file: 'a.ts', note: 'n' }] }];");
-  write(join(tmp, 'outside.mjs'), "export default [{ name: 'evil', run: () => [] }];");
-  const { checks, errors } = await loadProjectChecks(dir, ['checks/ok.mjs', '../outside.mjs', '/etc/x.mjs', 'checks/missing.mjs']);
-  assert.deepEqual(checks.map((c) => c.name), ['ok-check']);
+  write(join(dir, 'checks/ok.mjs'), "export default [];");
+  const { paths, errors } = resolveProjectChecks(dir, ['checks/ok.mjs', '../outside.mjs', '/etc/x.mjs', 'checks/missing.mjs']);
+  assert.deepEqual(paths, [join(dir, 'checks/ok.mjs')]);
   assert.equal(errors.length, 3);
 });
 
-test('a project check that throws or returns junk is unavailable, never fatal', async () => {
+test('a project check that throws, returns junk or is badly named is unavailable, never fatal', async () => {
   const dir = join(tmp, 'p2');
   write(join(dir, 'checks/c.mjs'), [
     "export default [",
@@ -46,10 +45,8 @@ test('a project check that throws or returns junk is unavailable, never fatal', 
     "  { name: 'bad name!', run: () => [] },",
     "];",
   ].join('\n'));
-  const { checks, errors } = await loadProjectChecks(dir, ['checks/c.mjs']);
-  assert.equal(errors.length, 1, 'the badly named check is rejected');
-  const results = runProjectChecks(checks, { files: [{ file: 'x.ts', added: [], removed: [] }] });
-  assert.deepEqual(results.map((r) => [r.check, Boolean(r.error)]), [['thrower', true], ['junk', true], ['good', false]]);
+  const results = await runProjectChecks([join(dir, 'checks/c.mjs')], { files: [{ file: 'x.ts', added: [], removed: [] }], repoRoot: tmp });
+  assert.deepEqual(results.map((r) => [r.check, Boolean(r.error)]), [['thrower', true], ['junk', true], ['good', false], ['c.mjs', true]]);
   assert.deepEqual(results[2].facts, [{ check: 'good', file: 'x.ts', line: 2, note: 'saw it' }]);
 });
 

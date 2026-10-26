@@ -7,7 +7,7 @@
 import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { prDiff } from './lib/diff.mjs';
+import { git, prDiff } from './lib/diff.mjs';
 import { route } from './lib/routing.mjs';
 import { redact } from './lib/redact.mjs';
 import { ghRequest, listIssueComments, listReactions, listReviewComments } from './lib/gh.mjs';
@@ -19,7 +19,7 @@ import { SUMMARY_MARKER } from './lib/markers.mjs';
 import { runPaths } from './lib/paths.mjs';
 import { PROJECT_SUBDIR, activeProject, setActiveProject } from './lib/config.mjs';
 import { loadReviewProject } from './lib/project.mjs';
-import { loadProjectChecks, runProjectChecks } from './lib/project-checks.mjs';
+import { resolveProjectChecks, runProjectChecks } from './lib/project-checks.mjs';
 import { readAt } from './lib/git-read.mjs';
 import { withheldDenies } from './lib/withheld.mjs';
 import { mergeFromBase, writeCollaborators } from './lib/repo-facts.mjs';
@@ -58,7 +58,7 @@ const readOr = (p) => {
   }
 };
 
-function runChecks({ files, repoRoot, baseSha, headSha, title, baseDir, projectChecks }) {
+async function runChecks({ files, repoRoot, baseSha, headSha, title, baseDir, projectChecks }) {
   const config = activeProject().config;
   const verify = config.checks.verifyDiff ? join(baseDir, config.checks.verifyDiff.script) : null;
   const checks = [
@@ -77,7 +77,13 @@ function runChecks({ files, repoRoot, baseSha, headSha, title, baseDir, projectC
       return { check, error };
     }
   });
-  return [...builtin, ...runProjectChecks(projectChecks, { files, repoRoot, baseSha, headSha, title, config })];
+  let mergeBase = baseSha;
+  try {
+    mergeBase = git(['merge-base', baseSha, headSha], repoRoot).trim();
+  } catch {
+    // keep the base
+  }
+  return [...builtin, ...(await runProjectChecks(projectChecks, { files, repoRoot, baseSha, headSha, mergeBase, title, config }))];
 }
 
 let tierWritten = false;
@@ -139,9 +145,9 @@ export async function prepareProject(baseDir) {
   if (!existsSync(join(dir, 'config.json'))) return { project: null, why: 'no .pr-review/config.json on the base branch yet' };
   const project = loadReviewProject(dir);
   if (project.errors.length) return { project: null, why: `invalid project config: ${project.errors.slice(0, 5).join('; ')}` };
-  const loaded = await loadProjectChecks(dir, project.config.checks.project);
-  project.projectChecks = loaded.checks;
-  project.loadErrors = loaded.errors;
+  const resolved = resolveProjectChecks(dir, project.config.checks.project);
+  project.projectChecks = resolved.paths;
+  project.loadErrors = resolved.errors;
   return { project };
 }
 
@@ -196,14 +202,14 @@ async function main() {
     const tier = classify({ ...state, ...inc, prFileCount: paths.length });
     const files = tier === 'full' ? prFiles : inc.incrementDiff;
     const factPaths = [...new Set(files.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
-    const checked = tier === 'none' ? [] : runChecks({ files, repoRoot, baseSha: BASE_SHA, headSha: HEAD_SHA, title: PR_TITLE, baseDir, projectChecks: project.projectChecks });
+    // Every GitHub read first; then the token leaves this process before any
+    // check runs (project checks also run in a token-free child).
     const repoChecks = tier === 'none' ? [] : [{ check: 'mergeFromBase', facts: mergeFromBase(BASE_SHA, HEAD_SHA, repoRoot) }];
     if (!deps.offline) {
       const wc = await writeCollaborators(REPO, deps.request);
       state.writeCollaborators = wc.status;
       if (wc.facts.length) repoChecks.push({ check: 'writeCollaborators', facts: wc.facts });
     }
-    const results = [...checked, ...repoChecks, ...(tier === 'none' ? [] : loadFailures)];
     let pull = null;
     try {
       pull = await deps.pull(REPO, PR);
@@ -211,6 +217,9 @@ async function main() {
       pull = null;
     }
     const prContext = pull ? await gatherContext(REPO, PR, pull, deps.listIssueComments) : 'PR context unavailable';
+    delete process.env.GH_TOKEN;
+    const checked = tier === 'none' ? [] : await runChecks({ files, repoRoot, baseSha: BASE_SHA, headSha: HEAD_SHA, title: PR_TITLE, baseDir, projectChecks: project.projectChecks });
+    const results = [...checked, ...repoChecks, ...(tier === 'none' ? [] : loadFailures)];
     mkdirSync(out, { recursive: true });
     if (tier !== 'none') recordMaterial(state, writeMaterial(out, { baseSha: BASE_SHA, headSha: HEAD_SHA, tier, incrementText: inc.incrementText, cwd: repoRoot }));
     const routeResult = route(factPaths);

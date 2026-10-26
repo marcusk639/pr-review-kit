@@ -59,8 +59,8 @@ test('every action dependency is pinned to a full commit SHA and none is local',
   }
 });
 
-test('the PR head is neutralized after the knowledge restore and before externals and the model', () => {
-  const order = ['- name: Facts', '- name: Restore reviewer knowledge from the trust SHA', '- name: Neutralize PR head', '- name: External counterparts', '- name: Review'].map((n) => review.indexOf(n));
+test('the PR head is neutralized after the knowledge restore and before facts, externals and the model', () => {
+  const order = ['- name: Restore reviewer knowledge from the trust SHA', '- name: Neutralize PR head', '- name: Facts', '- name: External counterparts', '- name: Review'].map((n) => review.indexOf(n));
   assert.ok(order.every((x) => x > 0));
   assert.deepEqual([...order].sort((a, b) => a - b), order);
   assert.match(stepOf(review, 'Restore reviewer knowledge from the trust SHA'), /rm -rf \.claude-pr \.pr-review\n/);
@@ -75,9 +75,11 @@ test('one trust SHA: resolved at run start, used for the knowledge checkout and 
 });
 
 test('model writes and edits are allowed only under OUT; workspace and kit writes denied', () => {
-  assert.deepEqual(allow, ['Read', 'Grep', 'Glob', 'Write(/${{ runner.temp }}/pr-review/**)', 'Edit(/${{ runner.temp }}/pr-review/**)']);
+  const files = ['inline.json', 'findings.json', 'summary.md'];
+  assert.deepEqual(allow, ['Read', 'Grep', 'Glob', ...files.map((f) => `Write(/\${{ runner.temp }}/pr-review/${f})`), ...files.map((f) => `Edit(/\${{ runner.temp }}/pr-review/${f})`)]);
+  assert.ok(deny.includes('Write(/${{ runner.temp }}/pr-review/.claude/**)'));
   for (const t of ['Skill', 'Task', 'Agent', 'mcp__github', 'Read(./.claude-pr/**)', 'Read(/${{ github.workspace }}/.claude-pr/**)']) assert.ok(deny.includes(t), t);
-  assert.match(review, /Edit\(\/\$\{\{ runner\.temp \}\}\/prstate-snapshot\/\*\*\)\$\{\{ steps\.facts\.outputs\.extra_deny \}\}"/, 'withheld denies are appended');
+  assert.match(review, /\*\*\)\$\{\{ steps\.facts\.outputs\.extra_deny \}\}"/, 'withheld denies are appended');
   assert.ok(!deny.includes('Edit'), 'no bare Edit deny (it would override the OUT allow rule)');
   for (const t of ['Write', 'Edit']) {
     assert.ok(deny.includes(`${t}(/\${{ github.workspace }}/**)`), `${t} workspace`);
@@ -127,10 +129,21 @@ test('every engine path is the pinned action path, never the workspace', () => {
 test('the distill model has the review sandbox and cannot write the snapshot apply trusts', () => {
   const lallow = (/--allowedTools "([^"]+)"/.exec(learn)?.[1] ?? '').split(',');
   const ldeny = (/--disallowedTools "([^"]+)"/.exec(learn)?.[1] ?? '').split(',');
-  assert.deepEqual(lallow, ['Read', 'Grep', 'Glob', 'Write(/${{ runner.temp }}/pr-review-learn/**)', 'Edit(/${{ runner.temp }}/pr-review-learn/**)']);
+  assert.deepEqual(lallow, ['Read', 'Grep', 'Glob', 'Write(/${{ runner.temp }}/pr-review-learn/proposals.json)', 'Edit(/${{ runner.temp }}/pr-review-learn/proposals.json)']);
+  assert.ok(ldeny.includes('Write(/${{ runner.temp }}/pr-review-learn/bundle/**)'));
   for (const t of ['Bash', 'WebFetch', 'WebSearch', 'Read(//proc/**)', 'Read(/${{ github.workspace }}/.git/**)', 'Write(/${{ runner.temp }}/learn-snapshot/**)', 'Edit(/${{ runner.temp }}/learn-snapshot/**)', 'Write(/${{ github.workspace }}/**)']) assert.ok(ldeny.includes(t), t);
   assert.match(stepOf(learn, 'Distill'), /continue-on-error: true/);
   assert.ok(learn.indexOf('- name: Distill') < learn.indexOf('- name: Apply'));
+});
+
+test('learn and propose refuse to run anywhere but the default branch', () => {
+  for (const yml of [learn, proposeAction]) {
+    const step = stepOf(yml, 'Default branch only');
+    assert.match(step, /REF: \$\{\{ github\.ref \}\}/);
+    assert.match(step, /DEFAULT: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+    assert.match(step, /exit 1/);
+    assert.ok(yml.indexOf('- name: Default branch only') < yml.indexOf('- name:', yml.indexOf('- name: Default branch only') + 5));
+  }
 });
 
 test('learning: no write token in learn; propose runs no model and gets no Claude token', () => {

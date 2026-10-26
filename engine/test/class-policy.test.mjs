@@ -30,3 +30,15 @@ test('findings below their class confidence floor are not shown; Critical and se
   assert.deepEqual(r.findings.findings.map((x) => x.slug), ['c3:a.ts:hi', 'c3:a.ts:crit', 'c4:a.ts:x']);
   assert.equal(r.belowFloor, 1);
 });
+
+test('learning.forbidden takes exact knowledge files or globs; anything else is a config error', async () => {
+  const { normalizeConfig: n } = await import('../lib/config.mjs');
+  const base = { version: 1, project: 'p', classes: [{ id: 1, name: 'x' }], knowledge: ['checklist.md', 'conventions.md', 'maps/contract-api.md'] };
+  assert.deepEqual(n({ ...base, learning: { forbidden: ['conventions.md', 'maps/**'] } }).errors, []);
+  assert.match(n({ ...base, learning: { forbidden: ['CLAUDE.md'] } }).errors.join(), /learning\.forbidden: CLAUDE\.md is neither a glob nor a knowledge file/);
+  const cfg = n({ ...base, learning: { forbidden: ['maps/**'] } }).config;
+  const c = { id: 'C-1', kind: 'correction', scope: { paths: ['src/a.ts'], class: 1, linkTypes: [] }, scopeKey: '1:src/a.ts', text: 't', security: false, sources: [{ id: 's', url: 'u', pr: 1 }] };
+  const prop = (target) => applyProposals({ candidates: [c], proposals: [{ candidate: 'C-1', target, rule: 'r', scope: { paths: ['src/a.ts'] } }], config: cfg, files: ['src/a.ts'], today: 'd' });
+  assert.equal(prop('maps/contract-api.md').added.length, 0, 'glob-forbidden target refused');
+  assert.equal(prop('conventions.md').added.length, 1);
+});
