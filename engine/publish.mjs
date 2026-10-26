@@ -70,6 +70,8 @@ function untrustedBody(fallback, idKey, linkTypes, notices) {
   return renderSummary({ state: {}, findings: null, narrative: '', outcome: 'failure', reason: 'failed', ledger, rawMarker: fallback?.rawMarker ?? null, notices });
 }
 
+export const rejectedNotice = (n) => `> ${n} finding(s) a maintainer rejected were not re-raised`;
+
 export const FROZEN_NOTICE = '> ledger frozen for security entries: id key unavailable';
 
 // Without the key: no security or withheld entry can be created (or matched),
@@ -93,7 +95,7 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
   const prior = priorPayload(s, idKey, linkTypes);
   if (s.tier === 'none' && outcome === 'skipped') return noChangeBody(prior, headSha, baseSha, notices, rawMarker);
   // Tier "none" never runs the model, so a "success" alongside it is not trusted.
-  const { findings: completed, reason } = completion(s, findingsText, outcome, narrative);
+  const { findings: completed, reason, suppressed } = completion(s, findingsText, outcome, narrative);
   if (!completed) {
     const lines = [...notices, ...frozenNotice(idKey, prior.ledger, [], [])];
     return renderSummary({ state: s, findings: null, narrative: '', outcome: 'failure', reason: reason ?? failureReason(executionLog), ledger: prior, notices: lines, rawMarker });
@@ -111,7 +113,8 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
   // (security), or a maintainer's reply to the inline comment (non-security).
   // An id reported again in this run stays open.
   const dispositioned = new Set(resolvedIds.filter((id) => !keyed.has(id)));
-  const acked = new Set(strings(s.acknowledgedSlugs).map(ledgerSlug));
+  // A maintainer's reply (acknowledged) or trusted 👎 (rejected) dispositions the finding.
+  const acked = new Set([...strings(s.acknowledgedSlugs), ...strings(s.feedback?.rejectedSlugs)].map(ledgerSlug));
   const merged = markResolved(
     mergeLedger(prior.ledger, findings.findings, findings.resolvedSlugs, s.tier, { key: idKey, needles }),
     (e) => (e.security ? dispositioned.has(e.id) : !e.withheld && acked.has(e.slug) && !reported(e)),
@@ -134,7 +137,7 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     carried: visible.filter((e) => e.status === 'open' && !reported(e)),
     resolved: visible.filter((e) => e.status === 'resolved'),
     securityClause: idKey ? securityClause : NO_KEY,
-    notices: [...notices, ...frozenNotice(idKey, prior.ledger, findings.findings, needles)],
+    notices: [...notices, ...(suppressed ? [rejectedNotice(suppressed)] : []), ...frozenNotice(idKey, prior.ledger, findings.findings, needles)],
     rawMarker,
     partial: isPartial(s),
   });

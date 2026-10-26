@@ -50,6 +50,7 @@ function findingError(f, i) {
   if (!CONFIDENCES.includes(f.confidence)) return `${at}.confidence invalid`;
   // inlinePosted is optional and ignored: publish sets it from what it posted.
   if (typeof f.security !== 'boolean' || (f.inlinePosted !== undefined && typeof f.inlinePosted !== 'boolean')) return `${at} flags invalid`;
+  if (f.reraise !== undefined && (typeof f.reraise !== 'string' || !f.reraise.trim() || f.reraise.length > 300)) return `${at}.reraise invalid`;
   if (!Array.isArray(f.locations) || f.locations.length === 0) return `${at}.locations empty`;
   for (const l of f.locations) {
     if (!l || typeof l.file !== 'string' || !l.file || !Number.isInteger(l.line) || l.line < 0 || !SIDES.includes(l.side)) {

@@ -21,7 +21,7 @@ test('loadState tolerates corrupt ledger marker', async () => {
 
 test('loadState defaults with no summary', async () => {
   const s = await loadState('o/r', 1, { listIssueComments: none, listReviewComments: none });
-  assert.deepEqual(s, { lastReviewedSha: null, lastBaseSha: null, ledger: [], linkTypesSeen: [], inlineSlugs: [], acknowledgedSlugs: [] });
+  assert.deepEqual(s, { lastReviewedSha: null, lastBaseSha: null, ledger: [], linkTypesSeen: [], inlineSlugs: [], acknowledgedSlugs: [], feedback: { rejectedSlugs: [], corrections: [] } });
 });
 
 test('loadState reads a valid marker from the bot summary', async () => {

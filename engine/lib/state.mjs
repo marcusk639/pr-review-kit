@@ -1,15 +1,17 @@
 import { BOT_AUTHOR, SUMMARY_MARKER, decodeLedger, extractInlineSlugs, rawLedgerMarker } from './markers.mjs';
+import { activeProject } from './config.mjs';
+import { feedbackRecords, prFeedback } from './feedback.mjs';
 
 // Both the summary and the inline comments are posted by publish.
 const SUMMARY_AUTHOR = BOT_AUTHOR;
 const INLINE_AUTHOR = BOT_AUTHOR;
 const SHA_RE = /^[0-9a-f]{40}$/;
 
-const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+const trustedAssoc = (x) => activeProject().config.trust.contextAssociations.includes(x);
 const FP_RE = /<!-- pr-review:fp=([^ >]+) -->/;
 const MAX_ACK = 200;
 
-const EMPTY = () => ({ lastReviewedSha: null, lastBaseSha: null, ledger: [], linkTypesSeen: [], inlineSlugs: [], acknowledgedSlugs: [] });
+const EMPTY = () => ({ lastReviewedSha: null, lastBaseSha: null, ledger: [], linkTypesSeen: [], inlineSlugs: [], acknowledgedSlugs: [], feedback: { rejectedSlugs: [], corrections: [] } });
 const sha = (v) => (typeof v === 'string' && SHA_RE.test(v) ? v : null);
 
 function fromPayload(p) {
@@ -34,7 +36,7 @@ export function findSummary(comments) {
 export function acknowledgedSlugs(reviewComments) {
   const all = reviewComments ?? [];
   const replied = new Set(
-    all.filter((c) => c?.user?.login !== INLINE_AUTHOR && TRUSTED.has(c?.author_association) && c.in_reply_to_id != null).map((c) => c.in_reply_to_id),
+    all.filter((c) => c?.user?.login !== INLINE_AUTHOR && trustedAssoc(c?.author_association) && c.in_reply_to_id != null).map((c) => c.in_reply_to_id),
   );
   const out = [];
   for (const c of all) {
@@ -48,10 +50,23 @@ export function acknowledgedSlugs(reviewComments) {
 // When the summary cannot be read, or its marker is base64 that does not
 // decode, the state is flagged priorUnavailable (with the raw marker when
 // there is one) so publish never treats the empty defaults as "no history".
-export async function loadState(repo, pr, { listIssueComments, listReviewComments }) {
+// Reactions are listed only for the bot's inline comments that have some.
+async function reactionsFor(repo, comments, listReactions) {
+  const out = {};
+  if (!listReactions) return out;
+  for (const c of comments) {
+    const r = c?.reactions;
+    if (c?.user?.login !== INLINE_AUTHOR || !r || !(r['+1'] > 0 || r['-1'] > 0)) continue;
+    out[c.id] = await listReactions(repo, c.id);
+  }
+  return out;
+}
+
+export async function loadState(repo, pr, { listIssueComments, listReviewComments, listReactions }) {
   const state = EMPTY();
+  let comments = [];
   try {
-    const comments = await listIssueComments(repo, pr);
+    comments = await listIssueComments(repo, pr);
     const summary = findSummary(comments);
     const decoded = summary ? decodeLedger(summary.body) : null;
     // Only a plain object is a ledger; an array or a marker outside the
@@ -69,6 +84,10 @@ export async function loadState(repo, pr, { listIssueComments, listReviewComment
     const reviews = await listReviewComments(repo, pr);
     state.inlineSlugs = extractInlineSlugs(reviews.filter((c) => c.user?.login === INLINE_AUTHOR).map((c) => c.body));
     state.acknowledgedSlugs = acknowledgedSlugs(reviews);
+    // Trusted feedback on earlier findings: 👎 means "do not re-raise", text is a correction.
+    const reactions = await reactionsFor(repo, reviews, listReactions);
+    const trusted = activeProject().config.trust.feedbackAuthors;
+    state.feedback = prFeedback(feedbackRecords({ pr, reviewComments: reviews, issueComments: comments, reactions, ledger: state.ledger, trusted }));
   } catch {
     // keep defaults
   }

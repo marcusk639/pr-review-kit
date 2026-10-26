@@ -18,12 +18,19 @@ export function failureReason(executionLog) {
 // run cut off at its turn limit never passes), and summary.md exists
 // (narrative null means it does not). Shared by composeBody, inline posting
 // and advisory delivery.
+// A finding a trusted maintainer 👎'd on this PR (state.feedback.rejectedSlugs)
+// is not re-raised unless the model says why it is materially worse
+// (reraise). Critical and security findings are never dropped here.
+const keepRejected = (f) => Boolean(f.reraise) || f.security || f.severity === 'Critical';
+
 export function completion(state, findingsText, outcome, narrative) {
-  if (!isObject(state) || outcome !== 'success' || state.tier === 'none') return { findings: null, reason: null };
+  if (!isObject(state) || outcome !== 'success' || state.tier === 'none') return { findings: null, reason: null, suppressed: 0 };
   const parsed = validateFindings(findingsText ?? '');
-  if (!parsed.ok) return { findings: null, reason: null };
-  if (parsed.value.complete !== true || narrative === null) return { findings: null, reason: 'incomplete' };
-  return { findings: parsed.value, reason: null };
+  if (!parsed.ok) return { findings: null, reason: null, suppressed: 0 };
+  if (parsed.value.complete !== true || narrative === null) return { findings: null, reason: 'incomplete', suppressed: 0 };
+  const rejected = new Set(strings(state.feedback?.rejectedSlugs));
+  const kept = parsed.value.findings.filter((f) => !rejected.has(f.slug) || keepRejected(f));
+  return { findings: { ...parsed.value, findings: kept }, reason: null, suppressed: parsed.value.findings.length - kept.length };
 }
 
 export const completedFindings = (...args) => completion(...args).findings;

@@ -6,6 +6,7 @@ import { redact } from './redact.mjs';
 import { SEVERITIES, fitMarker, visibleEntries } from './ledger.mjs';
 import { validateFindings, securityPointer } from './findings.mjs';
 import { securityNeedles, mentions, touchesSecurityFile } from './needles.mjs';
+import { handleOf } from './feedback.mjs';
 
 export { validateFindings, securityPointer };
 
@@ -37,8 +38,9 @@ function renderFinding(f, needles, isNew, clause) {
   if (f.security) return `- ${redact(securityPointer(f, clause))}`;
   const fresh = isNew ? ' (new)' : '';
   if (touchesSecurityFile(f, needles)) return `- **${WITHHELD_TITLE}** (confidence: ${f.confidence})${fresh}`;
+  const again = f.reraise ? ` (re-raised after 👎: ${clean(f.reraise, 300)})` : '';
   return [
-    `- **${clean(f.title, 200)}** (confidence: ${f.confidence})${fresh}${f.inlinePosted ? ' (inline comment posted)' : ''}`,
+    `- **${clean(f.title, 200)}** (confidence: ${f.confidence})${fresh}${f.inlinePosted ? ' (inline comment posted)' : ''}${again} · \`${handleOf(f.slug)}\``,
     `  - Where: ${f.locations.map(where).join('; ')}`,
     `  - Why: ${clean(f.why)}`,
     `  - Fix: ${clean(f.fix)}`,
@@ -49,7 +51,7 @@ function renderFinding(f, needles, isNew, clause) {
 function renderPriorEntry(e) {
   if (e.security) return `- Security-relevant issue (${e.severity}) reported earlier; details sent privately`;
   if (e.withheld) return `- **${WITHHELD_TITLE}** (${e.severity}, from an earlier review)`;
-  return `- **${clean(e.title || e.slug, 200)}** (${e.severity}, from an earlier review)`;
+  return `- **${clean(e.title || e.slug, 200)}** (${e.severity}, from an earlier review) · \`${handleOf(e.slug)}\``;
 }
 
 // A trimmable section: assemble() pops its lines before dropping findings.
@@ -179,6 +181,7 @@ function assemble(head, groups, narrative, markerText, sections = []) {
 }
 
 const ADVISORY = '_Advisory only: not a required check. Security-relevant findings show only a pointer here._';
+const FEEDBACK = '_Feedback: React 👍/👎 on an inline comment, or reply `F-…` 👍/👎 with a reason in a PR comment (e.g. `F-1a2b3c 👎 intentional: …`). Only maintainers\' feedback counts._';
 
 // Failure keeps the last completed review's open findings; tier "none" (no
 // model run, outcome "none") also lists what that review resolved.
@@ -218,6 +221,7 @@ export function renderSummary({ state, findings, narrative, outcome, ledger, rea
     headline(sha, state?.tier, list, carried, Boolean(raw), partial),
     tierLine(state),
     ADVISORY,
+    FEEDBACK,
     ...notices,
   ].join('\n\n');
   const n = needles ?? securityNeedles(list);

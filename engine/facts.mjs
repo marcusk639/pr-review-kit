@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { prDiff } from './lib/diff.mjs';
 import { route } from './lib/routing.mjs';
 import { redact } from './lib/redact.mjs';
-import { ghRequest, listIssueComments, listReviewComments } from './lib/gh.mjs';
+import { ghRequest, listIssueComments, listReactions, listReviewComments } from './lib/gh.mjs';
 import { loadState } from './lib/state.mjs';
 import { classify, maxTurnsFor } from './lib/tier.mjs';
 import { computeIncrement } from './lib/increment.mjs';
@@ -122,8 +122,8 @@ function recordMaterial(state, m) {
 
 // PR_REVIEW_OFFLINE (local runs and tests): no GitHub calls, prior state empty.
 function githubDeps(env) {
-  if (env.PR_REVIEW_OFFLINE) return { listIssueComments: async () => [], listReviewComments: async () => [], pull: async () => null };
-  return { listIssueComments, listReviewComments, pull: (repo, pr) => ghRequest('GET', `/repos/${repo}/pulls/${pr}`) };
+  if (env.PR_REVIEW_OFFLINE) return { listIssueComments: async () => [], listReviewComments: async () => [], listReactions: async () => [], pull: async () => null };
+  return { listIssueComments, listReviewComments, listReactions, pull: (repo, pr) => ghRequest('GET', `/repos/${repo}/pulls/${pr}`) };
 }
 
 // The project from the base checkout, or null (then: tier none, no review).

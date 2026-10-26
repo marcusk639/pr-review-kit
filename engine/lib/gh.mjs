@@ -55,6 +55,11 @@ export function listReviewComments(repo, pr) {
   return paginate(`/repos/${repo}/pulls/${pr}/comments`);
 }
 
+// Reactions on one pull request review comment (user, content, created_at).
+export function listReactions(repo, commentId) {
+  return paginate(`/repos/${repo}/pulls/comments/${commentId}/reactions`);
+}
+
 export async function upsertSummary(repo, pr, body) {
   const comments = await listIssueComments(repo, pr);
   const existing = comments.find(
