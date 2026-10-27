@@ -20,6 +20,7 @@ import { renderKnowledge, renderPrBody } from './render.mjs';
 import { runLearnCommands } from './commands.mjs';
 import { closedLearningSources } from './closed.mjs';
 import { redact, terms } from '../lib/redact.mjs';
+import { withheldDenies } from '../lib/withheld.mjs';
 
 const ENGINE = dirname(dirname(fileURLToPath(import.meta.url)));
 const json = (v) => `${JSON.stringify(v, null, 2)}\n`;
@@ -125,6 +126,22 @@ async function listPulls(repo, windowDays, now = Date.now()) {
   return all;
 }
 
+// The distill model reads the default-branch checkout, so it gets the same
+// withheld Read denies as the review model. If they cannot be expressed, no
+// model runs (deterministic distillation only): fail closed.
+export function collectOutputs(project, candidates, workspace) {
+  let distill = project.config.learning.distill;
+  let extraDeny = '';
+  let warning = null;
+  try {
+    extraDeny = withheldDenies(workspace, project);
+  } catch {
+    distill = 'deterministic';
+    warning = 'pr-review learning: withheld paths cannot be denied to the model; distilling deterministically';
+  }
+  return { distill, extraDeny, warning, text: `candidates=${candidates}\ndistill=${distill}\nextra_deny=${extraDeny ? `,${extraDeny}` : ''}\n` };
+}
+
 async function main(cmd, env = process.env) {
   const root = resolve(env.PR_REVIEW_LEARN_ROOT || '.');
   const project = loadProject(join(root, PROJECT_SUBDIR));
@@ -142,7 +159,9 @@ async function main(cmd, env = process.env) {
     const rejectedSources = await closedLearningSources({ repo: env.REPO, branch: project.config.learning.branch, request: ghRequest, currentLessons: lessonsOf(project.dir) }).catch(() => []);
     const r = prepareLearn({ project, records, recordsByPr, out, snapshot, rejectedSources });
     console.log(`learn collect: ${pulls} PR(s), ${records.length} trusted feedback record(s), ${r.candidates} candidate(s), ${r.unresolved} unresolved`);
-    if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `candidates=${r.candidates}\ndistill=${project.config.learning.distill}\n`);
+    const o = collectOutputs(project, r.candidates, resolve(env.GITHUB_WORKSPACE || root));
+    if (o.warning) console.log(`::warning::${o.warning}`);
+    if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, o.text);
   } else if (cmd === 'apply') {
     const files = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\n').filter(Boolean);
     const { manifest, body } = finishLearn({ project, root, out, snapshot, files, today: new Date().toISOString().slice(0, 10) });
