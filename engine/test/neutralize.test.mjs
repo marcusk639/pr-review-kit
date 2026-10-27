@@ -28,6 +28,10 @@ function tree() {
   put('.review-base/CLAUDE.md', 'base copy');
   put('.review-publish/CLAUDE.md', 'planted');
   put('src/ok.ts', 'fine');
+  put('.gitconfig', '[diff]');
+  put('.gitattributes', '* diff=x');
+  put('sub/.gitmodules', '[submodule]');
+  put('.config/git/config', '[core]');
   symlinkSync('/etc/hosts', join(root, 'src/link.ts'));
   symlinkSync(join(root, '.git'), join(root, 'gitlink'));
   return root;
@@ -37,7 +41,7 @@ test('neutralize removes every PR-head instruction channel and symlink, and noth
   const root = tree();
   const r = neutralize(root);
   const gone = (p) => !existsSync(join(root, p));
-  for (const p of ['AGENTS.md', 'src/CLAUDE.md', 'src/deep/AGENTS.md', 'src/CLAUDE.local.md', 'src/.claude', '.claude/settings.json', '.claude/settings.local.json', '.mcp.json', '.claude.json', '.ignore', 'web/.rgignore']) assert.ok(gone(p), p);
+  for (const p of ['.gitconfig', '.gitattributes', 'sub/.gitmodules', '.config/git', 'AGENTS.md', 'src/CLAUDE.md', 'src/deep/AGENTS.md', 'src/CLAUDE.local.md', 'src/.claude', '.claude/settings.json', '.claude/settings.local.json', '.mcp.json', '.claude.json', '.ignore', 'web/.rgignore']) assert.ok(gone(p), p);
   for (const p of ['AGENTS.md.pr-head', 'src/CLAUDE.md.pr-head', 'src/.claude.pr-head/skills/evil/SKILL.md', '.ignore.pr-head', 'web/.rgignore.pr-head']) assert.ok(existsSync(join(root, p)), p);
   assert.ok(gone('CLAUDE.md') && existsSync(join(root, 'CLAUDE.md.pr-head')), 'root CLAUDE.md too (the action restores the base copy)');
   assert.ok(!lstatSync(join(root, 'src/link.ts')).isSymbolicLink());

@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 // git with no inherited secrets or user/system config, the repository given
 // by -C (the calling process's cwd is irrelevant), and paths never quoted or
 // octal-escaped (non-ASCII and spaces arrive as they are).
-export const GIT_ENV = () => ({ PATH: process.env.PATH ?? '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', HOME: '/nonexistent' });
+export const GIT_ENV = () => ({ PATH: process.env.PATH ?? '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_COUNT: '0', GIT_ATTR_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', HOME: '/nonexistent', XDG_CONFIG_HOME: '/nonexistent' });
 
 export function git(args, cwd) {
   return execFileSync('git', [...(cwd ? ['-C', cwd] : []), '-c', 'core.quotePath=false', ...args], {

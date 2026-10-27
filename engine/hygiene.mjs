@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { redact, secretPatterns } from './lib/redact.mjs';
 import { git } from './lib/diff.mjs';
@@ -137,11 +138,30 @@ export function runVerifyDiff(baseSha, repoRoot, scriptPath, headSha) {
       return unavailable();
     }
   }
+  const cwd = mkdtempSync(join(tmpdir(), 'pr-review-verify-'));
+  const home = mkdtempSync(join(tmpdir(), 'pr-review-verify-home-'));
+  const repo = resolve(repoRoot);
   try {
-    // Base-branch script, but run without any inherited token or secret.
-    execFileSync('bash', [script, since], {
-      cwd: repoRoot,
-      env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: repoRoot, GIT_CONFIG_NOSYSTEM: '1' },
+    // Base-branch script, isolated like a project check: no token or secret,
+    // an empty cwd and HOME, and no user, system or command-line git config,
+    // so a PR's .gitconfig, .config/git/config or .gitattributes driver can
+    // never run. git finds the repository through GIT_DIR/GIT_WORK_TREE;
+    // scripts get <since> <head> and should diff objects (git diff "$1" "$2").
+    execFileSync('bash', [script, since, headSha ?? ''], {
+      cwd,
+      env: {
+        PATH: process.env.PATH ?? '/usr/bin:/bin',
+        HOME: home,
+        XDG_CONFIG_HOME: home,
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_NOSYSTEM: '1',
+        GIT_CONFIG_COUNT: '0',
+        GIT_ATTR_NOSYSTEM: '1',
+        GIT_TERMINAL_PROMPT: '0',
+        GIT_DIR: join(repo, '.git'),
+        GIT_WORK_TREE: repo,
+        PR_REVIEW_REPO: repo,
+      },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 60000,

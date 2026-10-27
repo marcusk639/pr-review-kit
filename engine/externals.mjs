@@ -12,7 +12,7 @@ import { neutralize } from './neutralize.mjs';
 import { PROJECT_SUBDIR, loadProject } from './lib/config.mjs';
 
 export const EXTERNAL_ROOT = '.pr-review-external';
-const ENV = { PATH: process.env.PATH, HOME: process.env.HOME ?? '/tmp', GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
+const ENV = { PATH: process.env.PATH, HOME: '/nonexistent', XDG_CONFIG_HOME: '/nonexistent', GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_COUNT: '0', GIT_ATTR_NOSYSTEM: '1' };
 const git = (args, cwd) => execFileSync('git', ['-c', 'credential.helper=', '-c', 'core.symlinks=false', '-c', 'protocol.file.allow=always', ...args], { cwd, env: ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 }).trim();
 
 function fetchOne(e, dest, baseUrl) {

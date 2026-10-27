@@ -11,7 +11,9 @@ import { lstatSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync }
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const INSTRUCTION_FILES = new Set(['CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.ignore', '.rgignore', '.gitignore', '.ripgreprc', '.mcp.json', '.claude.json']);
+// Instruction files, and git config a HOME-relative or attribute lookup could
+// load (.gitconfig, .gitattributes, .gitmodules; .config/git/ below).
+const INSTRUCTION_FILES = new Set(['CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.ignore', '.rgignore', '.gitignore', '.ripgreprc', '.mcp.json', '.claude.json', '.gitconfig', '.gitattributes', '.gitmodules']);
 // .review-base is the trust checkout (cloned fresh by the action); anything
 // else, .review-publish included, is PR content until replaced.
 const DEFAULT_SKIP = ['.git', '.review-base'];
@@ -46,7 +48,7 @@ export function neutralize(root, { skip = DEFAULT_SKIP } = {}) {
         writeFileSync(p, PLACEHOLDER);
         counts.symlinks++;
       } else if (st.isDirectory()) {
-        if (name === '.claude' && depth > 0) {
+        if ((name === '.claude' && depth > 0) || (name === 'git' && dir.endsWith('/.config'))) {
           moveAside(p);
           counts.renamed++;
           walk(`${p}.pr-head`, depth + 1);
