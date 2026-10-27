@@ -27,3 +27,14 @@ test('built-in facts and drift lists show withheld paths only as hashes', () => 
   assert.match(facts, /src\/a\.ts/);
   assert.equal(hidePath('src/a.ts'), 'src/a.ts');
 });
+
+test('withheld names with spaces are hidden whole when the PR changes them', async () => {
+  const { setKnownPaths, hidePathsIn } = await import('../lib/withheld.mjs');
+  const spaced = 'docs/firm/Comprehensive Context/TWK Fee Schedule.pdf';
+  setKnownPaths([SECRET_NAME, spaced, 'src/a.ts']);
+  const note = hidePathsIn(`changed ${SECRET_NAME} and ${spaced} and src/a.ts`);
+  assert.ok(!/Jane|Doe|offer|Fee Schedule|Comprehensive/.test(note), note);
+  assert.equal((note.match(/withheld:[0-9a-f]{8}/g) ?? []).length, 2);
+  assert.match(note, /src\/a\.ts/);
+  setKnownPaths([]);
+});

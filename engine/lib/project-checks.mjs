@@ -8,6 +8,7 @@
 // objects, never through a link), parseOnly(kind, text), mergeBase. Checks
 // must be synchronous. Notes are redacted and capped here, in the parent, and
 // withheld paths are replaced by a stable hash.
+import { hidePathsIn } from './withheld.mjs';
 import { fork } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -41,8 +42,7 @@ function cleanFact(name, f) {
   if (!f || typeof f !== 'object' || typeof f.file !== 'string' || typeof f.note !== 'string') return null;
   const withheld = activeProject().config.withheld;
   const hide = (p) => (withheld.some((g) => matches(p, g)) ? `withheld:${hash8(p)}` : p);
-  let note = redact(f.note);
-  for (const tok of note.match(/[\w.~@%+-]*\/[\w./~@%+-]+/g) ?? []) if (hide(tok) !== tok) note = note.split(tok).join(hide(tok));
+  const note = hidePathsIn(redact(f.note));
   const check = typeof f.check === 'string' && /^[A-Za-z][A-Za-z0-9-]{0,39}$/.test(f.check) ? f.check : name;
   const out = { check, file: hide(redact(f.file.slice(0, 300))), note: note.replace(/\s+/g, ' ').slice(0, MAX_NOTE) };
   if (Number.isInteger(f.line) && f.line >= 0) out.line = f.line;

@@ -21,7 +21,7 @@ import { PROJECT_SUBDIR, activeProject, setActiveProject } from './lib/config.mj
 import { loadReviewProject } from './lib/project.mjs';
 import { resolveProjectChecks, runProjectChecks } from './lib/project-checks.mjs';
 import { readAt } from './lib/git-read.mjs';
-import { hidePath, withheldDenies } from './lib/withheld.mjs';
+import { hidePath, setKnownPaths, withheldDenies } from './lib/withheld.mjs';
 import { mergeFromBase, writeCollaborators } from './lib/repo-facts.mjs';
 import { verifyLearningPr } from './lib/learning-pr.mjs';
 import { isEdited } from './lib/feedback.mjs';
@@ -202,6 +202,7 @@ async function main() {
     const prFiles = prDiff(BASE_SHA, HEAD_SHA, repoRoot);
     const paths = [...new Set(prFiles.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
     state.changedFiles = paths.slice(0, MAX_CHANGED);
+    setKnownPaths(paths);
     const inc = computeIncrement({ ...state, baseSha: BASE_SHA, headSha: HEAD_SHA, prPaths: paths, cwd: repoRoot });
     const tier = classify({ ...state, ...inc, prFileCount: paths.length });
     const files = tier === 'full' ? prFiles : inc.incrementDiff;

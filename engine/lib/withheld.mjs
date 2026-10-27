@@ -13,9 +13,16 @@ export const isWithheld = (path, project = activeProject()) => project.config.wi
 // A withheld path's NAME can itself be sensitive (client or person names), so
 // anything the model reads shows it only as a stable hash.
 export const hidePath = (path, project = activeProject()) => (isWithheld(path, project) ? `withheld:${createHash('sha256').update(String(path)).digest('hex').slice(0, 8)}` : path);
+// The PR's changed paths (set by facts): withheld ones are hidden by exact
+// match first, so a name with spaces is hidden whole, not just up to a space.
+let knownPaths = [];
+export const setKnownPaths = (paths) => {
+  knownPaths = [...new Set((paths ?? []).map(String))].sort((a, b) => b.length - a.length);
+};
 export const hidePathsIn = (text, project = activeProject()) => {
   if (!project.config.withheld.length) return text;
   let out = String(text ?? '');
+  for (const p of knownPaths) if (out.includes(p) && isWithheld(p, project)) out = out.split(p).join(hidePath(p, project));
   for (const tok of out.match(/[\w.~@%+-]*\/[\w./~@%+-]+/g) ?? []) if (hidePath(tok, project) !== tok) out = out.split(tok).join(hidePath(tok, project));
   return out;
 };
