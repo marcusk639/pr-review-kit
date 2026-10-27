@@ -71,7 +71,8 @@ function untrustedBody(fallback, idKey, linkTypes, notices) {
 // checks.writeCollaborators: a loud status line, never a login.
 function writersNotice(s) {
   if (s.writeCollaborators === 'unreadable') return ['> write collaborators could not be listed; others may be able to write to this repository'];
-  return Number.isInteger(s.writeCollaborators) && s.writeCollaborators > 0 ? [`> ${s.writeCollaborators} collaborator(s) other than the allowed ones can write to this repository`] : [];
+  // Pending invitations need Administration read, which no workflow token has.
+  return Number.isInteger(s.writeCollaborators) && s.writeCollaborators > 0 ? [`> ${s.writeCollaborators} collaborator(s) other than the allowed ones can write to this repository (pending invitations are not visible to this check)`] : [];
 }
 
 export const rejectedNotice = (n) => `> ${n} finding(s) a maintainer rejected were not re-raised`;

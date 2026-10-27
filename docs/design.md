@@ -153,6 +153,11 @@ listFiles})`. A tier whose `maxTurns` is 0 does not run the model.
   their inline comments and impact-table rows): reference behaviour, now with #127's canonical path matching.
   In small repos or on hub files (`config/settings.json`) this can hide unrelated findings. Fail-closed is kept;
   a `withholdExempt` list or location-based withholding is deferred to after the trial.
+- `.review-base` is a full checkout of the trust SHA, so withheld files are on disk there; they are protected by
+  the `Read(.review-base/**)` deny, not by absence. A sparse checkout (`.pr-review/`, the workflow, the verify
+  script) would remove them, but the verify-script path is only known after config is read; deferred.
+- Pending collaborator invitations need Administration read, which no workflow token has, so
+  `writeCollaborators` cannot see them; its notice says so and runbooks confirm none are open.
 - `learning.forbidden` entries are exact knowledge-file names or globs (relative to `.pr-review/`); anything
   else is a config error.
 

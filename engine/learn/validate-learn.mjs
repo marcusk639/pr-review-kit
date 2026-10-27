@@ -43,6 +43,7 @@ export function validateLearnWorkflow(root, project, { errors }) {
   if (/write/.test(perms.inline) || perms.body.some((l) => /write/.test(l))) errors.push('learning workflow: no workflow-level write permission (grant contents/pull-requests write to the propose job only)');
   for (const step of r.steps.filter((x) => /uses:\s*actions\/checkout@/.test(x))) {
     if (!/ref:\s*\$\{\{\s*github\.event\.repository\.default_branch\s*\}\}/.test(step)) errors.push('learning workflow: every checkout needs ref: ${{ github.event.repository.default_branch }}');
+    if (!/persist-credentials:\s*false/.test(step)) errors.push('learning workflow: every checkout needs persist-credentials: false');
   }
   for (const job of jobsOf(wf)) {
     if (/pr-review-kit\/actions\/learn@/.test(job) && /\b(?!id-token)[\w-]+:\s*write\b/.test(job.replace(/id-token:\s*write/g, ''))) errors.push('the learn job must not have write permissions (it runs the model)');

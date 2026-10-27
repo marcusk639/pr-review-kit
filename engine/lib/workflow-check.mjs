@@ -116,6 +116,8 @@ function checkReviewShape(text, steps, { securityChannel }, errors, warnings) {
   if (!cond.includes('!github.event.pull_request.draft')) errors.push('the job must skip draft PRs in its if:');
   if (/types:\s*\[[^\]]*\bclosed\b/.test(text) && !/github\.event\.action != 'closed' \|\| github\.event\.pull_request\.merged/.test(cond)) errors.push("closed PRs need the merged guard: (github.event.action != 'closed' || github.event.pull_request.merged)");
   if (!cond.includes("github.actor != 'dependabot[bot]'")) warnings.push('the job does not skip Dependabot (its runs get no secrets)');
+  // A stacked PR's base is another branch's tip; that tip would be the trust SHA.
+  if (!/branches:\s*\[?\s*['"]?main\b/.test(text) || !/(github\.base_ref|github\.event\.pull_request\.base\.ref)\s*==\s*'main'/.test(cond)) warnings.push("review only PRs into main: add branches: [main] to the pull_request trigger and github.base_ref == 'main' to the job if: (a stacked PR's trust SHA would be another branch's tip)");
   if (/write-all/.test(text)) errors.push('permissions: write-all is not allowed');
   if (/^\s+contents:\s*write\s*$/m.test(text)) errors.push('the review workflow must not grant contents: write');
   if (!/^\s+pull-requests:\s*write\s*$/m.test(text)) errors.push('permissions need pull-requests: write (to post)');
