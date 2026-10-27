@@ -2,7 +2,9 @@
 // to spare it the High self-edit finding:
 // - verifyLearningPr (GitHub API, never git metadata, which a pusher controls):
 //   opened by github-actions[bot], from this repo's learning branch, every
-//   commit's GitHub author and committer the bot;
+//   commit's GitHub author and committer the bot AND carrying a signature
+//   GitHub verified (author/committer logins are mapped from the commit email,
+//   which any pusher can set; a valid signature is what a pusher cannot forge);
 // - learningPrOnly (git objects): every change confined to learned/*.json or
 //   the managed blocks of .pr-review/*.md, and that content matching the
 //   schema the learning job writes.
@@ -44,7 +46,7 @@ export async function verifyLearningPr({ repo, pr, branch, request }) {
     const p = await request('GET', `/repos/${repo}/pulls/${pr}`);
     if (p?.user?.login !== BOT || p?.head?.repo?.full_name !== repo || p?.head?.ref !== branch) return false;
     const commits = await request('GET', `/repos/${repo}/pulls/${pr}/commits?per_page=100`);
-    return Array.isArray(commits) && commits.length > 0 && commits.length < 100 && commits.every((c) => c?.author?.login === BOT && c?.committer?.login === BOT);
+    return Array.isArray(commits) && commits.length > 0 && commits.length < 100 && commits.every((c) => c?.author?.login === BOT && c?.committer?.login === BOT && c?.commit?.verification?.verified === true && c?.commit?.verification?.reason === 'valid');
   } catch {
     return false;
   }

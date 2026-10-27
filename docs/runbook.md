@@ -37,7 +37,11 @@ Nothing here has been done. Every step needs Marcus's approval. Order follows re
    not re-raised); run the learning workflow by `workflow_dispatch`; check the learning PR (lesson, scope, source
    link, precision table, `learning.commands` passed); merge it; open a PR that would trigger the same finding and
    confirm the behaviour changed. **Verify here:** claude-code-action runs on `workflow_dispatch` with the OAuth
-   token; the learning branch commit's `author.login` is `github-actions[bot]`.
+   token; the learning branch commits' `author.login` and `committer.login` are `github-actions[bot]` AND
+   `commit.verification.verified` is `true` with reason `valid` (`gh api repos/<o>/<r>/pulls/<n>/commits`). If they
+   are not signed, the learning PR keeps the High self-edit finding (fail closed): review it as an ordinary
+   self-edit. Also push one commit to the learning branch with `user.email` set to the bot's noreply address and
+   confirm the PR is no longer treated as a learning PR.
 7. **Trial**: two weeks of 👍/👎 on every finding (recovery-platform spec §8.9: ≥ ~70% 👍, no wrong
    Critical/High).
 

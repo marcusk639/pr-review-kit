@@ -69,7 +69,7 @@ test('any other file is not', () => {
 import { verifyLearningPr, learnedContentValid } from '../lib/learning-pr.mjs';
 import { checkSelfEdit } from '../hygiene.mjs';
 
-const api = ({ author = 'github-actions[bot]', fork = false, ref = 'pr-review/learning', commits = [{ author: { login: 'github-actions[bot]' }, committer: { login: 'github-actions[bot]' } }] } = {}) =>
+const api = ({ author = 'github-actions[bot]', fork = false, ref = 'pr-review/learning', commits = [{ author: { login: 'github-actions[bot]' }, committer: { login: 'github-actions[bot]' }, commit: { verification: { verified: true, reason: 'valid' } } }] } = {}) =>
   async (method, path) => {
     if (/\/pulls\/\d+$/.test(path)) return { user: { login: author }, head: { ref, repo: { full_name: fork ? 'x/r' : 'o/r' } } };
     if (/\/pulls\/\d+\/commits/.test(path)) return commits;
@@ -85,6 +85,15 @@ test('the learning PR is verified through the API, never git metadata', async ()
   assert.equal(await v({ commits: [{ author: { login: 'github-actions[bot]' }, committer: { login: 'marcusk639' } }] }), false);
   assert.equal(await v({ commits: [{ author: null, committer: { login: 'github-actions[bot]' } }] }), false);
   assert.equal(await verifyLearningPr({ repo: 'o/r', pr: 9, branch: 'b', request: async () => { throw new Error('x'); } }), false);
+});
+
+test('forged bot email: an unsigned push that GitHub maps to github-actions[bot] is not a learning PR', async () => {
+  const bot = { login: 'github-actions[bot]' };
+  const v = (verification) => verifyLearningPr({ repo: 'o/r', pr: 9, branch: 'pr-review/learning', request: api({ commits: [{ author: bot, committer: bot, commit: { verification } }] }) });
+  assert.equal(await v({ verified: false, reason: 'unsigned' }), false, 'the verifier PoC: unsigned commit with the bot noreply email');
+  assert.equal(await v({ verified: true, reason: 'unknown_key' }), false);
+  assert.equal(await v(undefined), false, 'no verification block fails closed');
+  assert.equal(await v({ verified: true, reason: 'valid' }), true);
 });
 
 test('PoC: a commit authored as "github-actions[bot]" by name keeps the High self-edit finding', () => {

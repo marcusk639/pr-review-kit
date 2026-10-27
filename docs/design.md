@@ -140,7 +140,9 @@ listFiles})`. A tier whose `maxTurns` is 0 does not run the model.
   proposed tree; a failure proposes nothing. The propose job (model-free, the only write token) commits only under
   `.pr-review/`, keeps one learning PR, and never overwrites a branch a maintainer edited. A learning PR is spared
   the High self-edit finding only when the GitHub API shows a bot-opened PR from the learning branch whose every
-  commit has the bot as author and committer login (git author names are ignored: a pusher sets them), and every
+  commit has the bot as author and committer login and a signature GitHub reports as verified with reason
+  `valid` (git author names are ignored, and logins alone are not enough: GitHub maps them from the commit email,
+  which a pusher sets), and every
   change is inside the managed blocks and `learned/*.json` with the shapes the learning job writes. propose writes
   only `learned/*.json` and the knowledge files the loop may edit, never through a link, each under 512 KB. PRs opened by `GITHUB_TOKEN` trigger no workflows: the learn job's own commands are the
   check.
@@ -188,5 +190,5 @@ withheld, private channels, feedback marker, learning fixtures, learn commands, 
 checks, dry-run). Workflows: actionlint on the examples and on local usage of all four actions. Still needs
 GitHub (in the runbook): whether `GITHUB_TOKEN` can list collaborators (Metadata read), the canary PR, whether
 claude-code-action runs on `schedule`/`workflow_dispatch` with an OAuth token, and whether git-data-API commits by
-`GITHUB_TOKEN` carry `author.login == github-actions[bot]` (the edited-branch guard and the learning-PR exemption
-rely on the author).
+`GITHUB_TOKEN` carry `author.login == github-actions[bot]` and a verified signature (the edited-branch guard
+relies on the author; the learning-PR exemption also on the signature, and fails closed without it).
