@@ -57,12 +57,29 @@ const NOT_MAPPED = (name) => `secret ${name} is not mapped to a kit input (only 
 // The workflow token: ${{ github.token }} is the preferred reference and is
 // not a secrets.* expression. secrets.GITHUB_TOKEN (the built-in) and
 // secrets.GH_TOKEN (a user-defined secret, possibly a broader PAT) are allowed
-// anywhere, each with a warning recommending github.token.
+// only on a non-kit step, each with a warning recommending github.token.
 const TOKEN_SECRETS = { GITHUB_TOKEN: 'secrets.GITHUB_TOKEN works but ${{ github.token }} is the preferred reference', GH_TOKEN: 'secrets.GH_TOKEN is a user-defined secret (possibly a broader PAT); prefer ${{ github.token }}' };
 
+// Token secrets may appear only on a step that is not a kit action: never in
+// job- or workflow-level env (it would reach facts and the model's step) and
+// never on a kit step (the kit takes the token itself, as github.token).
+function checkTokenPlacement(text, steps, errors, warnings) {
+  const tokens = (t) => [...t.matchAll(SECRET)].map((m) => (m[1] ?? m[2]).toUpperCase()).filter((n) => n in TOKEN_SECRETS);
+  const inSteps = [];
+  for (const step of steps) {
+    const found = tokens(step);
+    if (!found.length) continue;
+    if (kitAction(step)) for (const n of new Set(found)) errors.push(`secrets.${n} must not be passed to a kit action (the kit uses github.token itself)`);
+    inSteps.push(...found);
+  }
+  const all = tokens(text);
+  for (const n of inSteps) all.splice(all.indexOf(n), 1);
+  for (const n of new Set(all)) errors.push(`secrets.${n} is outside any step (job- or workflow-level env reaches facts and the model's step); set it on the step that needs it`);
+  for (const n of new Set(tokens(text))) warnings.push(TOKEN_SECRETS[n]);
+}
+
 function checkSecrets(text, steps, errors, warnings = []) {
-  const seen = new Set([...text.matchAll(SECRET)].map((m) => (m[1] ?? m[2]).toUpperCase()).filter((n) => n in TOKEN_SECRETS));
-  for (const n of seen) warnings.push(TOKEN_SECRETS[n]);
+  checkTokenPlacement(text, steps, errors, warnings);
   if (/toJSON\s*\(\s*secrets\s*\)/i.test(text)) errors.push('toJSON(secrets) exposes every secret; map each one to its kit input');
   if (/^\s*secrets:\s*inherit\s*$/im.test(text)) errors.push('secrets: inherit passes every secret; map each one to its kit input');
   const names = (t) => [...t.matchAll(SECRET)].map((m) => m[1] ?? m[2]).filter((n) => !(n.toUpperCase() in TOKEN_SECRETS));

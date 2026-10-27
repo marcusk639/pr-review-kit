@@ -129,7 +129,9 @@ error.
 
 Pass `trust_sha: ${{ steps.review.outputs.trust_sha }}` to publish. Any other secret is a `validate` error. Refer
 to the workflow token as `${{ github.token }}` (the actions already do); `${{ secrets.GITHUB_TOKEN }}` and
-`${{ secrets.GH_TOKEN }}` (a user-defined secret, possibly a broader PAT) validate with a warning.
+`${{ secrets.GH_TOKEN }}` (a user-defined secret, possibly a broader PAT) validate with a warning only on a step
+that is not a kit action; in job- or workflow-level `env:`, or passed to a kit action, they are an error (they
+would reach facts and the model's step).
 
 ## 5. Check it locally
 

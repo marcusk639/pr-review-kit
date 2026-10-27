@@ -45,7 +45,7 @@ test('secrets are checked by role, not by name', () => {
   assert.match(errs(wf((s) => s.replace('          action_outcome:', '          claude_code_oauth_token: ${{ secrets.X }}\n          action_outcome:'))), /claude_code_oauth_token may only be passed to the review or learn action/);
   assert.match(errs(wf((s) => s.replace('          claude_code_oauth_token:', '          id_key: ${{ secrets.PR_REVIEW_ID_KEY }}\n          claude_code_oauth_token:'))), /id_key may only be passed to the publish action/);
   assert.match(errs(wf((s) => s.replace('    steps:\n', '    env:\n      X: ${{ secrets.OTHER }}\n    steps:\n'))), /secret OTHER is not mapped to a kit input/);
-  assert.deepEqual(checkWorkflow(wf((s) => s.replace('    steps:\n', '    env:\n      GH: ${{ secrets.GITHUB_TOKEN }}\n    steps:\n')), { kind: 'review', securityChannel: 'advisory' }).errors, []);
+  assert.match(errs(wf((s) => s.replace('    steps:\n', '    env:\n      GH: ${{ secrets.GITHUB_TOKEN }}\n    steps:\n'))), /secrets\.GITHUB_TOKEN is outside any step/);
 });
 
 test('trigger, permissions and comments are read the way GitHub reads them', () => {
@@ -93,19 +93,21 @@ test('M4: review guards must sit in the job condition, not anywhere in the file'
   assert.match(errs(moved), /same-repo guard/);
 });
 
-test('token references: github.token is clean; secrets.GITHUB_TOKEN and secrets.GH_TOKEN are allowed with a warning', () => {
-  const env = (expr) => wf((s) => s.replace('    steps:\n', `    env:\n      T: \${{ ${expr} }}\n    steps:\n`));
-  const check = (expr) => checkWorkflow(env(expr), { kind: 'review', securityChannel: 'advisory' });
-  const clean = check('github.token');
+test('token references: github.token is clean; token secrets only on a non-kit step, with a warning', () => {
+  const check = (y) => checkWorkflow(y, { kind: 'review', securityChannel: 'advisory' });
+  const jobEnv = (expr) => wf((s) => s.replace('    steps:\n', `    env:\n      T: \${{ ${expr} }}\n    steps:\n`));
+  const ownStep = (expr) => wf((s) => s.replace('    steps:\n', `    steps:\n      - name: probe\n        run: echo hi\n        env:\n          T: \${{ ${expr} }}\n`));
+  const kitStep = (expr) => wf((s) => s.replace('          action_outcome:', `          extra: \${{ ${expr} }}\n          action_outcome:`));
+  const clean = check(jobEnv('github.token'));
   assert.deepEqual(clean.errors, []);
   assert.ok(!clean.warnings.some((w) => /github\.token/.test(w)), 'no token warning for github.token');
-  for (const e of ['secrets.GITHUB_TOKEN', "secrets['GITHUB_TOKEN']", 'secrets.github_token']) {
-    const r = check(e);
-    assert.deepEqual(r.errors, [], e);
-    assert.ok(r.warnings.some((w) => /secrets\.GITHUB_TOKEN works but \$\{\{ github\.token \}\} is the preferred reference/.test(w)), e);
+  for (const e of ['secrets.GITHUB_TOKEN', "secrets['GITHUB_TOKEN']", 'secrets.github_token', 'secrets.GH_TOKEN']) {
+    const ok = check(ownStep(e));
+    assert.deepEqual(ok.errors, [], `${e} on a non-kit step`);
+    assert.ok(ok.warnings.some((w) => /prefer|preferred/.test(w)), `${e} warns`);
+    assert.ok(check(jobEnv(e)).errors.some((x) => /is outside any step/.test(x)), `${e} in job env is an error`);
+    assert.ok(check(kitStep(e)).errors.some((x) => /must not be passed to a kit action/.test(x)), `${e} on a kit step is an error`);
   }
-  const gh = check('secrets.GH_TOKEN');
-  assert.deepEqual(gh.errors, []);
-  assert.ok(gh.warnings.some((w) => /secrets\.GH_TOKEN is a user-defined secret \(possibly a broader PAT\); prefer \$\{\{ github\.token \}\}/.test(w)));
-  assert.match(errs(env('secrets.OTHER_TOKEN')), /secret OTHER_TOKEN is not mapped to a kit input/, 'any other secret is still an error');
+  assert.ok(check(ownStep('secrets.GH_TOKEN')).warnings.some((w) => /secrets\.GH_TOKEN is a user-defined secret \(possibly a broader PAT\); prefer \$\{\{ github\.token \}\}/.test(w)));
+  assert.match(errs(jobEnv('secrets.OTHER_TOKEN')), /secret OTHER_TOKEN is not mapped to a kit input/, 'any other secret is still an error');
 });
