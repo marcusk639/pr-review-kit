@@ -2,6 +2,7 @@
 // project's setup (classes, visibility, knowledge, demoted classes), feedback
 // on earlier findings (as quoted data) and the trusted PR context. Bounded.
 import { redact } from './redact.mjs';
+import { hidePath, hidePathsIn } from './withheld.mjs';
 
 const MAX_BYTES = 40000;
 const MAX_PER_CHECK = 30;
@@ -18,8 +19,9 @@ export function clip(text, max) {
 }
 
 function renderFact(f) {
-  const where = f.line != null ? `${f.file}:${f.line}` : f.file;
-  return clip(`- [${f.check}] ${where}: ${redact(f.note)}`, MAX_LINE).replace(/\n\[truncated\]$/, '...');
+  const file = hidePath(f.file);
+  const where = f.line != null ? `${file}:${f.line}` : file;
+  return clip(`- [${f.check}] ${where}: ${hidePathsIn(redact(f.note))}`, MAX_LINE).replace(/\n\[truncated\]$/, '...');
 }
 
 function renderResult(r) {
@@ -43,7 +45,7 @@ function tierSection(tier, driftFiles) {
   const out = ['## Review tier', tier];
   if (tier === 'none') out.push('', 'No review ran: nothing in the PR changed since the last reviewed commit.');
   else if (TIER_NOTE[tier]) out.push('', TIER_NOTE[tier]);
-  if (tier === 'base-drift') out.push('', 'Counterpart files changed on the base branch:', list(driftFiles.slice(0, MAX_PER_CHECK)));
+  if (tier === 'base-drift') out.push('', 'Counterpart files changed on the base branch:', list(driftFiles.slice(0, MAX_PER_CHECK).map((p) => hidePath(p))));
   return [...out, ''];
 }
 

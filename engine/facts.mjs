@@ -21,7 +21,7 @@ import { PROJECT_SUBDIR, activeProject, setActiveProject } from './lib/config.mj
 import { loadReviewProject } from './lib/project.mjs';
 import { resolveProjectChecks, runProjectChecks } from './lib/project-checks.mjs';
 import { readAt } from './lib/git-read.mjs';
-import { withheldDenies } from './lib/withheld.mjs';
+import { hidePath, withheldDenies } from './lib/withheld.mjs';
 import { mergeFromBase, writeCollaborators } from './lib/repo-facts.mjs';
 import { verifyLearningPr } from './lib/learning-pr.mjs';
 import { isEdited } from './lib/feedback.mjs';
@@ -109,7 +109,8 @@ export function unavailableChecks(results) {
 function writeOutputs({ out, stateFile }, text, state) {
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'facts.md'), redact(text));
-  writeFileSync(join(out, 'state.json'), redactTerms(JSON.stringify(state, null, 2)));
+  // The model's copy shows withheld paths only as hashes; the trusted snapshot keeps them for publish.
+  writeFileSync(join(out, 'state.json'), redactTerms(JSON.stringify({ ...state, changedFiles: (state.changedFiles ?? []).map((p) => hidePath(p)) }, null, 2)));
   // The kit's generic procedure, from the pinned engine (the model reads it from OUT).
   copyFileSync(join(ENGINE_DIR, 'REVIEW.md'), join(out, 'REVIEW.md'));
   try {

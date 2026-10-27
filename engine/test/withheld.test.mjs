@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { RP } from './helpers/rp.mjs';
 import { normalizeConfig, setActiveProject } from '../lib/config.mjs';
 import { withholdDiff, withheldDenies } from '../lib/withheld.mjs';
+import { hidePath } from '../lib/withheld.mjs';
 import { selectInline } from '../lib/inline-post.mjs';
 
 afterEach(() => setActiveProject(RP));
@@ -26,11 +27,12 @@ const DIFF = [
   '',
 ].join('\n');
 
-test('withheld files keep their header but lose their content in the model diff', () => {
+test('withheld files keep a hashed header and lose their content in the model diff', () => {
   use(['notes/**']);
   const out = withholdDiff(DIFF);
   assert.doesNotMatch(out, /Jane|1234|old/);
-  assert.match(out, /diff --git a\/notes\/private\.md b\/notes\/private\.md\n\[content withheld by config: 2 line\(s\) added, 0 removed\]\n/);
+  assert.match(out, /diff --git a\/withheld:[0-9a-f]{8} b\/withheld:[0-9a-f]{8}\n\[content withheld by config: 2 line\(s\) added, 0 removed\]\n/);
+  assert.ok(!out.includes('notes/private.md'), 'the withheld name itself is hidden');
   assert.match(out, /\+b\n/);
 });
 
@@ -106,7 +108,10 @@ test('cpa-consulting client-data globs: deny, stub and .pr-head deny agree', asy
     const text = readFileSync(join(out, f), 'utf8');
     for (const [p, t] of Object.entries(secret)) {
       assert.doesNotMatch(text, new RegExp(t), `${f}: ${p}`);
-      assert.match(text, new RegExp(`diff --git a/${p.replace(/\./g, '\\.')} b/${p.replace(/\./g, '\\.')}\\n\\[content withheld by config`), `${f}: ${p} stubbed`);
+      const h = hidePath(p);
+      assert.notEqual(h, p, `${f}: ${p} is withheld`);
+      assert.ok(text.includes(`diff --git a/${h} b/${h}\n[content withheld by config`), `${f}: ${p} stubbed under its hash`);
+      assert.ok(!text.includes(p), `${f}: ${p} name never shown`);
     }
     assert.match(text, /PUBLIC-OK/, `${f}: non-withheld content kept`);
   }
