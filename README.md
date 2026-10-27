@@ -6,6 +6,7 @@ knowledge, config and checks under `.pr-review/`; the kit holds everything that 
 
 - **Design and decisions:** [docs/design.md](docs/design.md)
 - **Wiring a repository:** [docs/consumer-guide.md](docs/consumer-guide.md), starting from `examples/consumer/`
+- **GitHub tokens in workflows (best practice, any repository):** [docs/github-tokens.md](docs/github-tokens.md)
 
 ## Layout
 
