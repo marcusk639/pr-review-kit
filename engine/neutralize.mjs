@@ -48,7 +48,9 @@ export function neutralize(root, { skip = DEFAULT_SKIP } = {}) {
         writeFileSync(p, PLACEHOLDER);
         counts.symlinks++;
       } else if (st.isDirectory()) {
-        if ((name === '.claude' && depth > 0) || (name === 'git' && dir.endsWith('/.config'))) {
+        // Every .claude, the root one too: claude-code-action snapshots the PR's
+        // root .claude into .claude-pr/ (a nested .claude) before restoring base's.
+        if (name === '.claude' || (name === 'git' && dir.endsWith('/.config'))) {
           moveAside(p);
           counts.renamed++;
           walk(`${p}.pr-head`, depth + 1);

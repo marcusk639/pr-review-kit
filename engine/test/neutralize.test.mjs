@@ -49,7 +49,8 @@ test('neutralize removes every PR-head instruction channel and symlink, and noth
   assert.ok(!lstatSync(join(root, 'gitlink')).isSymbolicLink());
   assert.equal(readFileSync(join(root, '.git/config'), 'utf8'), 'token', '.git untouched');
   assert.equal(readFileSync(join(root, '.review-base/CLAUDE.md'), 'utf8'), 'base copy', 'skipped dirs untouched');
-  assert.ok(existsSync(join(root, '.claude/rules/x.md')), 'the root .claude is restored by the action; only settings are removed');
+  assert.ok(gone('.claude'), 'the root .claude is set aside too, so the action has no PR .claude to snapshot into .claude-pr/');
+  assert.ok(existsSync(join(root, '.claude.pr-head/rules/x.md')), 'kept as data under .claude.pr-head');
   assert.equal(readFileSync(join(root, 'src/ok.ts'), 'utf8'), 'fine');
   assert.equal(r.symlinks, 2);
   assert.ok(existsSync(join(root, '.review-publish/CLAUDE.md.pr-head')), '.review-publish is PR content, neutralized');

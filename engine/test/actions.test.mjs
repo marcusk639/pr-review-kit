@@ -78,7 +78,7 @@ test('model writes and edits are allowed only under OUT; workspace and kit write
   const files = ['inline.json', 'findings.json', 'summary.md'];
   assert.deepEqual(allow, ['Read', 'Grep', 'Glob', ...files.map((f) => `Write(/\${{ runner.temp }}/pr-review/${f})`), ...files.map((f) => `Edit(/\${{ runner.temp }}/pr-review/${f})`)]);
   assert.ok(deny.includes('Write(/${{ runner.temp }}/pr-review/.claude/**)'));
-  for (const t of ['Skill', 'Task', 'Agent', 'mcp__github', 'Read(./.claude-pr/**)', 'Read(/${{ github.workspace }}/.claude-pr/**)', 'Read(/${{ github.workspace }}/.review-publish/**)', 'Read(~/.*)', 'Read(~/.*/**)', 'Read(/${{ runner.temp }}/_github_workflow/**)', 'Read(/${{ runner.temp }}/_github_home/**)']) assert.ok(deny.includes(t), t);
+  for (const t of ['Skill', 'Task', 'Agent', 'mcp__github', 'Read(./.claude-pr/**)', 'Read(/${{ github.workspace }}/.claude-pr/**)', 'Read(/${{ github.workspace }}/.review-publish/**)', 'Read(~/.*)', 'Read(~/.*/**)', 'Read(/${{ runner.temp }}/_github_workflow/**)', 'Read(/${{ runner.temp }}/_github_home/**)', 'Read(~/runners/**)', 'Read(~/actions-runner/**)', 'SlashCommand']) assert.ok(deny.includes(t), t);
   assert.ok(!deny.some((t) => t.includes('/home/runner')), 'no runner-specific home path');
   assert.match(review, /\*\*\)\$\{\{ steps\.facts\.outputs\.extra_deny \}\}"/, 'withheld denies are appended');
   assert.ok(!deny.includes('Edit'), 'no bare Edit deny (it would override the OUT allow rule)');
