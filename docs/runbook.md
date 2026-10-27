@@ -3,6 +3,32 @@
 Nothing here has been done. Every step needs Marcus's approval. Order follows recovery-platform's staging (spec
 §7.10, §10): the kit and each project's knowledge must be on the default branch before they review anything.
 
+## Automating the GitHub steps: `bin/enable-repo.mjs`
+
+`node bin/enable-repo.mjs --repo owner/name [--steps ...] [--apply]` runs the GitHub steps for one consumer with the
+`gh` CLI (signed in as the repository owner). It is a **dry run unless `--apply`** is given, and it reads each
+repository's own wiring (the secrets and variable its workflows map to kit inputs, its channel and visibility from
+`.pr-review/config.json`), so no per-repository flags are needed for renamed secrets.
+
+| Step (`--steps`)           | What it does                                                                                                                                                                                                                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `preflight` (always first) | Repository, Actions enabled, config found, the kit pin is on this repo's `main`, and no writer or pending write invitation other than the owner. Any of these failing **blocks** the secrets, merge and test-pr steps (`--allow-other-writers` overrides, not recommended).                |
+| `inbox`                    | Private-repo-issue channel only: the inbox repo exists (`--create-inbox` creates it), is private and owner-only with no invitations; sets the repository variable to `--inbox owner/name`.                                                                                                 |
+| `secrets`                  | `PR_REVIEW_ID_KEY` is generated; every other secret comes from an environment variable of the **same name** or a hidden prompt; `PR_REVIEW_REDACT_TERMS` from `--redact-terms-file` (optional). Values are never taken from the command line. Existing secrets are kept unless `--rotate`. |
+| `settings`                 | Allows GitHub Actions to create pull requests (the learning PR); the default token stays read-only.                                                                                                                                                                                        |
+| `merge`                    | Merges the setup PR (`--pr N`, or the open PR from `--branch`, default `chore/pr-review`) once every check finished green. Needs `--merge-method merge\|squash\|rebase`.                                                                                                                   |
+| `test-pr`                  | Opens a throwaway docs-only PR, waits for the review run (`--wait-minutes`, default 20), reports whether the summary comment was posted, then closes the PR and deletes its branch (`--keep-test-pr` keeps it).                                                                            |
+
+Default steps: `preflight,inbox,secrets,settings`. A typical first enablement, after a dry run:
+
+```bash
+export CLAUDE_CODE_OAUTH_TOKEN=...   # or let it prompt
+node bin/enable-repo.mjs --repo marcusk639/doc-classifier --steps preflight,secrets,settings,merge,test-pr --merge-method merge --apply
+node bin/enable-repo.mjs --repo marcusk639/claude-config --inbox marcusk639/pr-review-inbox --create-inbox --steps preflight,inbox,secrets,settings,merge,test-pr --merge-method merge --apply
+```
+
+It never does the steps only a person should: canary and replay PRs, the feedback round trip and the trial.
+
 ## A. The kit (once)
 
 1. **Create `marcusk639/pr-review-kit` (public)** and push `main` as is. Never rewrite its history: consumers pin
