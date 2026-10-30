@@ -7,7 +7,8 @@
 import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { git, prDiff } from './lib/diff.mjs';
+import { git } from './lib/diff.mjs';
+import { readPrDiff } from './lib/hunks.mjs';
 import { route } from './lib/routing.mjs';
 import { redact, redactTerms } from './lib/redact.mjs';
 import { ghRequest, listIssueComments, listReactions, listReviewComments } from './lib/gh.mjs';
@@ -109,8 +110,10 @@ export function unavailableChecks(results) {
 function writeOutputs({ out, stateFile }, text, state) {
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'facts.md'), redact(text));
-  // The model's copy shows withheld paths only as hashes; the trusted snapshot keeps them for publish.
-  writeFileSync(join(out, 'state.json'), redactTerms(JSON.stringify({ ...state, changedFiles: (state.changedFiles ?? []).map((p) => hidePath(p)) }, null, 2)));
+  // The model's copy shows withheld paths only as hashes, and leaves out hunk
+  // ranges (keyed by path, and publish's alone); the trusted snapshot keeps both.
+  const { hunkRanges: _h, ...forModel } = state;
+  writeFileSync(join(out, 'state.json'), redactTerms(JSON.stringify({ ...forModel, changedFiles: (state.changedFiles ?? []).map((p) => hidePath(p)) }, null, 2)));
   // The kit's generic procedure, from the pinned engine (the model reads it from OUT).
   copyFileSync(join(ENGINE_DIR, 'REVIEW.md'), join(out, 'REVIEW.md'));
   try {
@@ -182,6 +185,8 @@ async function main() {
     inlineSlugs: [],
     // The PR's changed paths: publish posts inline comments only on these.
     changedFiles: [],
+    // RIGHT-side hunk ranges per changed file: publish posts a suggestion only inside one.
+    hunkRanges: {},
     tier: 'full',
     maxTurns: maxTurnsFor('full'),
     headSha: HEAD_SHA,
@@ -199,7 +204,8 @@ async function main() {
   try {
     Object.assign(state, await loadState(REPO, PR, deps));
     const repoRoot = process.cwd();
-    const prFiles = prDiff(BASE_SHA, HEAD_SHA, repoRoot);
+    const { files: prFiles, hunkRanges } = readPrDiff(BASE_SHA, HEAD_SHA, repoRoot);
+    state.hunkRanges = hunkRanges;
     const paths = [...new Set(prFiles.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
     state.changedFiles = paths.slice(0, MAX_CHANGED);
     setKnownPaths(paths);

@@ -55,12 +55,18 @@ function projectSection(project) {
   const tag = (k) => [k.security ? 'security' : null, k.protected ? 'protected' : null, k.always ? 'always' : null, k.light ? 'light' : null, k.minConfidence ? `report only at ${k.minConfidence} confidence or above` : null].filter(Boolean);
   const classes = c.classes.map((k) => `${k.id}: ${k.name}${tag(k).length ? ` (${tag(k).join(', ')})` : ''}`);
   const demoted = [...(project.demotedClasses ?? [])].sort((a, b) => a - b);
+  const suggestionsLine = (sg, cfg) => {
+    if (!sg.enabled) return 'Suggestions: off (never write a `suggestion` field).';
+    const blocked = [...new Set([...cfg.classes.filter((k) => k.security).map((k) => k.id), ...sg.blockedClasses])].sort((a, b) => a - b);
+    return `Suggestions: on; at most ${sg.maxLines} lines and ${sg.maxChars} characters, a range of at most ${sg.maxRangeLines} lines. Blocked: .github/**, .pr-review/**, any .claude/ dir, package.json and lockfiles${sg.blockedPaths.length ? `, ${sg.blockedPaths.join(', ')}` : ''}${blocked.length ? `, and paths routed to classes ${blocked.join(', ')}` : ''}.`;
+  };
   return [
     '## Project',
     `Project: ${c.project}. Visibility: ${c.visibility}; security channel: ${c.securityChannel}.`,
     `Knowledge files: ${c.knowledge.join(', ')}`,
     `Large PR: more than ${c.largePr.files} files or ${c.largePr.lines} lines.`,
     `Inline comments: ${c.inline.severities.join(', ')} findings only; at most ${c.inline.max} per run.`,
+    suggestionsLine(c.inline.suggestions, c),
     ...(c.withheld.length ? [`Withheld paths (denied to you, stubbed in the diff): ${c.withheld.join(', ')}`] : []),
     ...(demoted.length ? [`Demoted classes (low precision; report only at high confidence, no inline comment): ${demoted.join(', ')}`] : []),
     '',

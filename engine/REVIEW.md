@@ -178,13 +178,39 @@ Write them to `<OUT>/inline.json` as one JSON array (write `[]` when there are n
     "line": 42,
     "side": "RIGHT",
     "body": "What breaks, the other side as file:line, and the fix."
+  },
+  {
+    "slug": "c9:web/src/Feed.tsx:loadFeed",
+    "path": "web/src/Feed.tsx",
+    "start_line": 40,
+    "line": 41,
+    "side": "RIGHT",
+    "body": "The error is swallowed, so the screen shows an empty feed instead of the retry banner.",
+    "suggestion": "  } catch (err) {\n    setError(err);"
   }
 ]
 ```
 
-`path` is a file the PR changes; `line` is a line of the diff on that file (`RIGHT` for the PR-head side, `LEFT`
-for a removed line). `body` is plain text. Publish appends the fingerprint, drops entries that break these rules,
-and records which were posted.
+- `slug` is the finding's slug in `findings.json`. `path` is a file the PR changes; `line` is a line of the diff
+  on that file (`RIGHT` for the PR-head side, `LEFT` for a removed line).
+- `start_line` (optional) makes a multi-line comment over `start_line`..`line`, on the `RIGHT` side, inside one
+  hunk of the diff. Outside one hunk, publish posts it on `line` alone.
+- `suggestion` (optional, only when `facts.md` says "Suggestions: on") is the exact replacement for lines
+  `start_line`..`line` (or `line` alone), which GitHub offers as a one-click change. Write only the replacement
+  text; publish adds the ` ```suggestion ` fence itself and drops any entry whose `body` contains one.
+  - Offer one only when the fix is local to those lines and complete: no partial fixes, no "something like"
+    code, nothing that needs a matching change elsewhere (say that in `body`). Keep it minimal, keep the file's
+    indentation, at most one per finding.
+  - Publish drops just the suggestion (the comment still posts) when it is not on the `RIGHT` side, its lines
+    are not all inside one hunk, it is over the size limits in `facts.md`, it contains a ` ``` ` fence, a
+    control character other than tab and newline, or an HTML comment, it quotes a secret, or the comment would
+    exceed the body limit with it.
+  - No suggestion on blocked paths (listed in `facts.md`, plus any path routed to a security class or a prior
+    security file). Describe the fix in `body` there instead.
+- `body` is plain text: no HTML comments and no fingerprint. Publish appends the fingerprint, posts Critical and
+  High comments before the others, drops entries that break these rules, and records which were posted. The
+  summary counts Critical or High comments dropped as malformed, outside the changed files, carrying their own
+  suggestion fence, or over the limit; other drops are not announced.
 
 ## Slugs
 

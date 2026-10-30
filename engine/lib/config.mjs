@@ -32,7 +32,7 @@ export const DEFAULTS = Object.freeze({
   withheld: [],
   externalCheckouts: [],
   largePr: { files: 60, lines: 5000 },
-  inline: { max: 10, severities: ['Critical', 'High'] },
+  inline: { max: 10, severities: ['Critical', 'High'], suggestions: { enabled: false, blockedPaths: [], blockedClasses: [], maxLines: 40, maxChars: 4000, maxRangeLines: 40 } },
   secrets: { extraPatterns: [], allowPaths: [], allowPatterns: [] },
   issueBody: { extraPatterns: [] },
   style: { noEmoji: false, noEmDash: false },
@@ -92,7 +92,11 @@ const SCHEMA = obj({
   withheld: globs,
   externalCheckouts: list(checkoutNode),
   largePr: obj({ files: int(1, 100000), lines: int(1, 10000000) }),
-  inline: obj({ max: int(0, 50), severities: list(oneOf(...SEVERITIES)) }),
+  inline: obj({
+    max: int(0, 50),
+    severities: list(oneOf(...SEVERITIES)),
+    suggestions: obj({ enabled: bool, blockedPaths: globs, blockedClasses: list(int(1, 999)), maxLines: int(1, 200), maxChars: int(1, 20000), maxRangeLines: int(1, 200) }),
+  }),
   secrets: obj({ extraPatterns: list(regex), allowPaths: globs, allowPatterns: list(regex) }),
   issueBody: obj({ extraPatterns: list(regex) }),
   style: obj({ noEmoji: bool, noEmDash: bool }),
@@ -139,6 +143,8 @@ export function normalizeConfig(raw) {
   if (c.securityChannel === 'advisory' && c.visibility !== 'public') errors.push('securityChannel advisory requires visibility public (advisories are public-repo only)');
   if (!BRANCH_RE.test(c.learning.branch) || PROTECTED_BRANCHES.has(c.learning.branch)) errors.push('learning.branch must be a dedicated branch name, not a default branch');
   checkClasses(c.classes, errors);
+  const ids = classIds(c);
+  for (const k of c.inline.suggestions.blockedClasses) if (!ids.has(k)) errors.push(`inline.suggestions.blockedClasses: class ${k} is not configured`);
   // One glob dialect both the diff stub and the model's Read deny agree on.
   for (const g of c.withheld) if (!SAFE_GLOB(g)) errors.push(`withheld: ${JSON.stringify(g)} cannot be expressed as a Read deny; use relative paths of ASCII letters, digits, . _ - and * ? (** only as a whole segment), e.g. "Caf*/**"`);
   for (const f of c.learning.forbidden) if (!/[*?]/.test(f) && !c.knowledge.includes(f)) errors.push(`learning.forbidden: ${f} is neither a glob nor a knowledge file (names are relative to .pr-review/)`);
