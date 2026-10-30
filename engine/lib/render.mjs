@@ -205,6 +205,10 @@ function renderPrior(ledger, markerText, banner, withResolved, notices = [], pri
   return assemble(head, groupBySeverity(open, renderPriorEntry), '', markerText, extra);
 }
 
+// claude-code-action runs the model only with the default branch's copy of
+// the workflow, so a PR that edits it cannot be reviewed before it merges.
+export const WORKFLOW_EDITED_BANNER = "> ⚠ not reviewed: this PR changes the review workflow, and claude-code-action runs the model only with the default branch's copy. Reviews resume on PRs opened after this one merges.";
+
 // rawMarker: an existing marker re-emitted verbatim when publish has no
 // decodable prior state (it only ever comes from rawLedgerMarker's pattern).
 // notices: fixed, code-written lines (never model text) shown under the banner.
@@ -214,7 +218,7 @@ export function renderSummary({ state, findings, narrative, outcome, ledger, rea
   const markerText = raw ?? encodeLedger(fitMarker(ledger, encodeLedger, MAX_MARKER));
   if (outcome === 'none') return renderPrior(ledger, markerText, `${clean(note, 200)}\n\n${advisory()}`, true, notices, Boolean(raw));
   const ok = outcome === 'success' && findings && Array.isArray(findings.findings);
-  if (!ok) return renderPrior(ledger, markerText, `> ⚠ review did not complete (${reason}) — will retry on next push`, false, notices, Boolean(raw));
+  if (!ok) return renderPrior(ledger, markerText, reason === 'workflow-edited' ? WORKFLOW_EDITED_BANNER : `> ⚠ review did not complete (${reason}) — will retry on next push`, false, notices, Boolean(raw));
   const list = findings.findings;
   const sha = String(findings.reviewedSha || state?.headSha || '').slice(0, 7);
   const head = [

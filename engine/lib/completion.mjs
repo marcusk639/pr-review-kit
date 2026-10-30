@@ -4,6 +4,7 @@ import { isObject, strings } from './prior.mjs';
 import { activeProject } from './config.mjs';
 
 const CONF = ['low', 'medium', 'high'];
+export const WORKFLOW_EDITED = 'workflow-edited';
 
 const RATE_RE = /rate.?limit|usage limit/i;
 // Only the tail holds the final result; earlier turns may quote PR code about rate limiting.
@@ -29,7 +30,9 @@ const keepRejected = (f) => Boolean(f.reraise) || f.security || f.severity === '
 export function completion(state, findingsText, outcome, narrative) {
   if (!isObject(state) || outcome !== 'success' || state.tier === 'none') return { findings: null, reason: null, suppressed: 0 };
   const parsed = validateFindings(findingsText ?? '');
-  if (!parsed.ok) return { findings: null, reason: null, suppressed: 0 };
+  // No findings from a PR that edits the review workflow: claude-code-action
+  // skipped the model (it runs only the default branch's workflow).
+  if (!parsed.ok) return { findings: null, reason: state.workflowEdited === true ? WORKFLOW_EDITED : null, suppressed: 0 };
   if (parsed.value.complete !== true || narrative === null) return { findings: null, reason: 'incomplete', suppressed: 0 };
   const rejected = new Set(strings(state.feedback?.rejectedSlugs));
   const kept = parsed.value.findings.filter((f) => !rejected.has(f.slug) || keepRejected(f));
@@ -50,6 +53,7 @@ export function outcomeLabel(snapshot, rest) {
   if (!isObject(snapshot)) return 'review did not complete (no trusted state)';
   if (snapshot.tier === 'none' && rest.outcome === 'skipped') return 'no change since the last review';
   const { findings, reason } = completion(snapshot, rest.findingsText, rest.outcome, rest.narrative);
+  if (reason === WORKFLOW_EDITED) return 'not reviewed (the PR edits the review workflow)';
   if (!findings) return `review did not complete (${reason ?? failureReason(rest.executionLog)})`;
   return isPartial(snapshot) ? 'partial review' : 'complete review';
 }
