@@ -22,7 +22,8 @@ const EXTRA_ALLOW = '${{ steps.facts.outputs.extra_allow }}';
 const SHELL_DENY = "${{ steps.facts.outputs.model_shell == 'on' && '' || 'Bash,' }}";
 const rawAllow = /--allowedTools "([^"]+)"/.exec(review)?.[1] ?? '';
 const rawDeny = /--disallowedTools "([^"]+)"/.exec(review)?.[1] ?? '';
-const allow = rawAllow.replace(EXTRA_ALLOW, '').split(',');
+const SERENA_TOOLS = '${{ steps.serena.outputs.tools }}';
+const allow = rawAllow.replace(EXTRA_ALLOW, '').replace(SERENA_TOOLS, '').split(',');
 const deny = rawDeny.replace(SHELL_DENY, 'Bash,').replace('${{ steps.facts.outputs.extra_deny }}', '').split(',');
 
 test('opt-in model tools: only facts adds allow rules, and Bash is denied unless model_shell is exactly on', () => {

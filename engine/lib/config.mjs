@@ -37,6 +37,9 @@ export const DEFAULTS = Object.freeze({
   // Opt-in model tools beyond Read/Grep/Glob: gh pr view/diff of this PR, and one
   // checked reply per run (engine/reply.mjs).
   model: { ghRead: false, reply: false },
+  // Opt-in Serena code navigation (review action input serena: on): directory
+  // names left out of Serena's source copy, at any depth.
+  serena: { exclude: ['node_modules', 'dist', 'build', '.next', 'coverage'] },
   issueBody: { extraPatterns: [] },
   style: { noEmoji: false, noEmDash: false },
   checks: {
@@ -102,6 +105,7 @@ const SCHEMA = obj({
   }),
   secrets: obj({ extraPatterns: list(regex), allowPaths: globs, allowPatterns: list(regex) }),
   model: obj({ ghRead: bool, reply: bool }),
+  serena: obj({ exclude: list(custom((v, d, path, errors) => (typeof v === 'string' && /^[A-Za-z0-9_.-]{1,60}$/.test(v) && v !== '.' && v !== '..' ? v : (errors.push(`${path} must be one directory name`), undefined)))) }),
   issueBody: obj({ extraPatterns: list(regex) }),
   style: obj({ noEmoji: bool, noEmDash: bool }),
   checks: obj({

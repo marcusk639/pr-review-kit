@@ -4,6 +4,8 @@
 import { redact } from './redact.mjs';
 import { hidePath, hidePathsIn } from './withheld.mjs';
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 const MAX_BYTES = 40000;
 const MAX_PER_CHECK = 30;
@@ -70,6 +72,7 @@ function projectSection(project) {
     `Large PR: more than ${c.largePr.files} files or ${c.largePr.lines} lines.`,
     `Inline comments: ${c.inline.severities.join(', ')} findings only; at most ${c.inline.max} per run.`,
     suggestionsLine(c.inline.suggestions, c),
+    ...(project.dir && existsSync(join(project.dir, 'serena', 'project.yml')) ? [`Code navigation (only when Serena runs): not indexed are directories named ${c.serena.exclude.join(', ')}, withheld paths, and the ignored_paths in .pr-review/serena/project.yml.`] : []),
     `Shell: ${c.model.ghRead ? '`gh pr view` and `gh pr diff` for this PR' : 'none'}. Reply command: ${c.model.reply ? `\`node ${REPLY_CMD}\`` : 'off'}.`,
     ...(c.withheld.length ? [`Withheld paths (denied to you, stubbed in the diff): ${c.withheld.join(', ')}`] : []),
     ...(demoted.length ? [`Demoted classes (low precision; report only at high confidence, no inline comment): ${demoted.join(', ')}`] : []),

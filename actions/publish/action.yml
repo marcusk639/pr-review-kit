@@ -45,6 +45,17 @@ inputs:
 runs:
   using: composite
   steps:
+    # The review action's opt-in Serena step records pending, and Stop Serena
+    # ok once no serena-runner process survives. Anything else means one may
+    # still be running, so nothing secret-bearing runs (Cleanup still does).
+    - name: Serena stopped
+      shell: bash
+      run: |
+        if [ -n "${PR_REVIEW_SERENA_STOP:-}" ] && [ "$PR_REVIEW_SERENA_STOP" != "ok" ]; then
+          echo "::error::pr-review: a Serena process may have survived the review; publish refused"
+          exit 1
+        fi
+
     # Fresh every time: whatever exists at this path now (a planted .git, a
     # symlink) must not be reused by the secret-bearing publish step.
     - name: Clear publish checkout path
