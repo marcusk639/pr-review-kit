@@ -31,7 +31,7 @@ classes (ids, security, always, light, protected, confidence floor), tier set an
 inline caps, PII and file-size rules, title scopes, workflow paths, trust lists, extra secret patterns and
 fake-credential allow-lists, withheld paths, external counterparts, style rules. Per project: knowledge files,
 routing, the addendum, project checks. recovery-platform's Firestore/contract/twin checks are an example project
-check (`examples/recovery-platform/`), not engine code. The reference's workflow/knowledge tests became `validate`.
+check (now in recovery-platform's own `.pr-review/checks/`), not engine code. The reference's workflow/knowledge tests became `validate`.
 
 ## 3. Loading mechanism (re-decided)
 
@@ -172,6 +172,12 @@ targets and `learning.forbidden`; per-class `protected` and `minConfidence`; `wi
 the write-collaborator fact; closed+merged PRs (trigger plus merged guard; tier `none` when the head was already
 reviewed); merge-from-base fact; style rules; learning-PR exemption (pure only); learn-job format/validate
 commands; neutralize, link-refusing reads and the sandbox changes (claude-config, verifier).
+
+**Accepted after the recovery-platform migration (2026-10-30), all off by default:** inline suggestions and
+Medium inline comments with Critical/High first (`inline.suggestions`); `gh pr view/diff` and one checked reply
+(`model.ghRead`, `model.reply`; the reply is the only model-initiated post, through kit code from the pinned path);
+Serena code navigation (review input `serena`, config from the trust SHA, isolation as in recovery-platform #138,
+plus withheld paths kept out of its copy); `referenceFiles` (base-branch `CLAUDE.md`-style files as data).
 
 **Covered differently:** summary-section toggles (E9) and fixed summary lines → the project addendum; branch
 guards (E12) and the job timeout (E13) → the consumer's workflow (`if:`, `timeout-minutes`); a "Loosenings" table

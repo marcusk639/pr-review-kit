@@ -20,6 +20,17 @@ inputs:
     description: Model alias passed to Claude Code.
     required: false
     default: opus
+  serena:
+    description: >-
+      "on" adds Serena's four read-only code-navigation tools (e.g. pass
+      vars.PR_REVIEW_SERENA). Needs .pr-review/serena/ (project.yml,
+      serena_config.yml, one prompt template overriding connection_prompt) on
+      the trust SHA. Serena runs as an unprivileged user with an empty
+      environment, no network and a copy of the tracked source; any failure
+      reviews without it, and publish refuses to run if a Serena process
+      survives the review.
+    required: false
+    default: "off"
 outputs:
   trust_sha:
     description: The one commit the project was read from; pass it to publish.
@@ -110,9 +121,174 @@ runs:
         PR_REVIEW_BASE: .review-base
       run: node "${{ steps.paths.outputs.kit_root }}/engine/externals.mjs"
 
-    # No shell for the model: facts wrote the diff, commit list and procedure
-    # into OUT. The model may write only its three output files (OUT is an
-    # --add-dir, which Claude Code would otherwise read .claude/ config from).
+    # Opt-in code navigation (inputs.serena). Serena and its language servers
+    # read PR-controlled files, so they run as serena-runner with an empty
+    # environment, no network, and a copy of the tracked source (minus
+    # config.serena.exclude and config.withheld): never the workspace .git/
+    # (the action's app token), RUNNER_TEMP (OUT, the state snapshot, runner
+    # command files) or the PR's own .serena/. Config comes from the trust SHA.
+    # Outputs are written only after the isolation probes pass; on any failure
+    # the review runs without Serena. astral-sh/setup-uv v10.3.2, pinned.
+    - name: Set up uv for Serena
+      if: inputs.serena == 'on' && steps.facts.outputs.tier != '' && steps.facts.outputs.tier != 'none'
+      continue-on-error: true
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
+      # Nothing from the PR head may steer the install: setup-uv otherwise reads the uv version
+      # and cache dir from uv.toml/pyproject.toml in the working directory (the PR checkout),
+      # and its cache post-step would upload a PR-chosen path.
+      with:
+        version: "0.13.6"
+        enable-cache: false
+        working-directory: .review-base
+
+    - name: Serena setup
+      id: serena
+      if: inputs.serena == 'on' && steps.facts.outputs.tier != '' && steps.facts.outputs.tier != 'none'
+      continue-on-error: true
+      shell: bash
+      env:
+        SERENA_VERSION: "1.7.0"
+        SR_USER: serena-runner
+        SR_HOME: /home/serena-runner
+        PR_REVIEW_BASE: .review-base
+        KIT_ROOT: ${{ steps.paths.outputs.kit_root }}
+      run: |
+        set -euo pipefail
+        # Publish refuses to run until Stop Serena records "ok".
+        echo "PR_REVIEW_SERENA_STOP=pending" >> "$GITHUB_ENV"
+        cfg=.review-base/.pr-review/serena
+        # Exactly one base template must override connection_prompt: the only Serena text the
+        # reviewer receives up front. Two overrides make Serena refuse to start.
+        overrides="$({ grep -lE '^  connection_prompt:' "$cfg"/prompt_templates/*.yml 2>/dev/null || true; } | wc -l | tr -d ' ')"
+        if [ ! -f "$cfg/project.yml" ] || [ ! -f "$cfg/serena_config.yml" ] || [ "$overrides" != "1" ]; then
+          echo "::warning::Serena config not on the trust SHA; reviewing without code navigation"
+          exit 0
+        fi
+        warm="$RUNNER_TEMP/serena-warmup"
+        rm -rf "$warm"
+        # The same lockdown rules validate enforces (read-only, four lookups, no code-running
+        # keys, no dashboard or trusted project): a config that breaks one is not installed.
+        if ! node "$KIT_ROOT/engine/serena-prep.mjs" check; then
+          echo "::warning::Serena config on the trust SHA fails the kit's checks; reviewing without code navigation"
+          exit 0
+        fi
+        node "$KIT_ROOT/engine/serena-prep.mjs" warmup "$warm"
+        # A user left by an earlier run (a reused or self-hosted runner) may own processes
+        # and files this run cannot vouch for: review without Serena instead.
+        if id "$SR_USER" >/dev/null 2>&1; then
+          echo "::warning::$SR_USER already exists on this runner; reviewing without code navigation"
+          exit 0
+        fi
+        sudo useradd --create-home --shell /usr/sbin/nologin "$SR_USER"
+        sudo chmod 700 "$SR_HOME"
+        SR_PATH="$SR_HOME/.local/bin:$(dirname "$(command -v uv)"):$(dirname "$(command -v node)"):/usr/local/bin:/usr/bin:/bin"
+        # SERENA_USAGE_REPORTING: env -i drops CI/GITHUB_ACTIONS, which Serena checks to skip its
+        # startup usage report, so opt out explicitly.
+        # env -C: sudo keeps the caller's working directory (the workspace), from which relative
+        # paths reach .git/ and RUNNER_TEMP without traversing /home/runner. Start in SR_HOME.
+        run_as() { sudo -n -u "$SR_USER" -H env -i -C "$SR_HOME" "HOME=$SR_HOME" "PATH=$SR_PATH" "SERENA_HOME=$SR_HOME/serena-home" SERENA_USAGE_REPORTING=false "$@"; }
+        run_as uv tool install --python 3.13 "serena-agent==$SERENA_VERSION"
+        SERENA_BIN="$SR_HOME/.local/bin/serena"
+        sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/serena-home"
+        sudo install -o "$SR_USER" -m 600 "$cfg/serena_config.yml" "$SR_HOME/serena-home/serena_config.yml"
+        # Review guidance replaces Serena's connection prompt (prompt_templates/).
+        # Serena reads every .yml there, so install them all; the file name does not matter.
+        sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/serena-home/prompt_templates"
+        sudo install -o "$SR_USER" -m 600 "$cfg"/prompt_templates/*.yml "$SR_HOME/serena-home/prompt_templates/"
+        # Network on, PR code absent: install the pinned language servers by indexing a
+        # throwaway project with one file per configured language server (serena-prep.mjs).
+        # The PR's code is indexed only offline.
+        sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/ls-warmup" "$SR_HOME/ls-warmup/.serena"
+        sudo install -o "$SR_USER" -m 600 "$warm"/* "$SR_HOME/ls-warmup/"
+        sudo install -o "$SR_USER" -m 600 "$cfg/project.yml" "$SR_HOME/ls-warmup/.serena/project.yml"
+        run_as "$SERENA_BIN" project index "$SR_HOME/ls-warmup" --log-level WARNING --timeout 60
+        # The PR source reaches Serena as a copy of tracked files only (serena-prep.mjs files):
+        # no .git/, no PR-supplied .serena/, no excluded or withheld paths. The copy is
+        # root-owned and read-only for serena-runner, which may write only src/.serena (its
+        # index). /home/runner is never opened up; the chmod 700 below keeps .git/ and
+        # RUNNER_TEMP out of reach, and the probes check both.
+        sudo install -d -m 755 "$SR_HOME/src"
+        # .pr-review/ in the working tree is already the trust copy, and the PR index may list
+        # files it does not have: copy the trust tree explicitly instead.
+        # --ignore-missing-args: a tracked path absent from the working tree is skipped, not fatal.
+        node "$KIT_ROOT/engine/serena-prep.mjs" files \
+          | sudo rsync -a --no-links --no-owner --no-group --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r --ignore-missing-args --from0 --files-from=- ./ "$SR_HOME/src/"
+        # The trust copy of .pr-review/, minus .serena/ and withheld paths (serena-prep.mjs project-files).
+        node "$KIT_ROOT/engine/serena-prep.mjs" project-files \
+          | sudo rsync -a --no-links --no-owner --no-group --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r --from0 --files-from=- .review-base/ "$SR_HOME/src/"
+        sudo chown -R root:root "$SR_HOME/src"
+        sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/src/.serena"
+        sudo install -o "$SR_USER" -m 600 "$cfg/project.yml" "$SR_HOME/src/.serena/project.yml"
+        # From here on serena-runner has no network and no view of the credentials.
+        chmod 700 "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP"
+        # Loopback too: DNS goes to systemd-resolved on 127.0.0.53, which forwards queries
+        # out, so a loopback exemption would leave DNS as an exfiltration channel. Serena
+        # talks to Claude over stdio and needs no sockets.
+        # -I OUTPUT 1: ahead of any existing ACCEPT rule. AF_UNIX sockets (systemd-resolved's
+        # D-Bus/varlink resolver API) are outside iptables; serena-runner holds no credentials.
+        sudo iptables -I OUTPUT 1 -m owner --uid-owner "$SR_USER" -j REJECT
+        sudo ip6tables -I OUTPUT 1 -m owner --uid-owner "$SR_USER" -j REJECT
+        # Isolation probes: any failure leaves the outputs unset, so Review runs without Serena.
+        if run_as curl -sS --max-time 5 -o /dev/null https://api.github.com; then
+          echo "::error::serena-runner reached the network"; exit 1
+        fi
+        if run_as getent hosts example.com >/dev/null 2>&1; then
+          echo "::error::serena-runner can resolve DNS names"; exit 1
+        fi
+        if run_as cat "$GITHUB_WORKSPACE/.git/config" >/dev/null 2>&1; then
+          echo "::error::serena-runner can read the workspace .git/config"; exit 1
+        fi
+        if run_as ls "$RUNNER_TEMP" >/dev/null 2>&1; then
+          echo "::error::serena-runner can list RUNNER_TEMP"; exit 1
+        fi
+        # Relative paths from the workspace, as a process would see them if it started there:
+        # only the chmod 700 above stands between these and the credentials.
+        rel_temp="$(realpath --relative-to="$PWD" "$RUNNER_TEMP")"
+        if sudo -n -u "$SR_USER" cat .git/config >/dev/null 2>&1; then
+          echo "::error::serena-runner can read .git/config relative to the workspace"; exit 1
+        fi
+        if sudo -n -u "$SR_USER" ls "$rel_temp" >/dev/null 2>&1; then
+          echo "::error::serena-runner can list RUNNER_TEMP relative to the workspace"; exit 1
+        fi
+        # Probe with a real file from the copy, never a fixed path that may not exist.
+        probe_file="$(sudo find "$SR_HOME/src" -type f -not -path '*/.serena/*' -not -path "$SR_HOME/src/.pr-review/*" -print -quit)"
+        if [ -z "$probe_file" ]; then
+          echo "::warning::no source files in the copy; reviewing without code navigation"
+          exit 0
+        fi
+        if run_as touch "$probe_file" 2>/dev/null; then
+          echo "::error::serena-runner can write the source copy"; exit 1
+        fi
+        extra="$(run_as env | grep -cvE '^(HOME|PATH|SERENA_HOME|SERENA_USAGE_REPORTING)=' || true)"
+        if [ "$extra" != "0" ]; then
+          echo "::error::serena-runner environment is not empty"; exit 1
+        fi
+        if ! run_as test -r "$probe_file"; then
+          echo "::warning::serena-runner cannot read the source copy; reviewing without code navigation"
+          exit 0
+        fi
+        # PR code is indexed only now, offline.
+        run_as "$SERENA_BIN" project index "$SR_HOME/src" --log-level WARNING --timeout 30
+        # Modes: editing. Their prompts arrive via initial_instructions, which the review does
+        # not allow; fixed_tools and read_only keep Serena to four read-only lookups.
+        python3 -c 'import json, sys; json.dump({"mcpServers": {"serena": {"command": "sudo", "args": sys.argv[2:]}}}, open(sys.argv[1], "w"))' \
+          "$RUNNER_TEMP/serena-mcp.json" \
+          -n -u "$SR_USER" -H env -i -C "$SR_HOME" "HOME=$SR_HOME" "PATH=$SR_PATH" "SERENA_HOME=$SR_HOME/serena-home" SERENA_USAGE_REPORTING=false \
+          "$SERENA_BIN" start-mcp-server --context claude-code --project "$SR_HOME/src" \
+          --mode editing --log-level WARNING
+        {
+          echo "mcp_args=--mcp-config $RUNNER_TEMP/serena-mcp.json"
+          echo "tools=mcp__serena__find_symbol,mcp__serena__find_referencing_symbols,mcp__serena__get_symbols_overview,mcp__serena__search_for_pattern,"
+          echo "prompt=Code navigation: the mcp__serena__* tools are available; their paths are relative to the repository root (see REVIEW.md)."
+        } >> "$GITHUB_OUTPUT"
+
+    # No shell for the model by default: facts wrote the diff, commit list and
+    # procedure into OUT. A project may opt in (config.model): facts then emits
+    # model_shell=on and extra_allow with the exact gh pr view/diff prefixes and
+    # the kit's reply command plus OUT/reply.md; Bash stays denied unless
+    # model_shell is exactly "on", and no other command is allowed. The model
+    # may write only its output files (OUT is an --add-dir, which Claude Code
+    # would otherwise read .claude/ config from).
     # --setting-sources user: no project CLAUDE.md, rules, skills or
     # settings (the settings input lands in the user settings, so hooks stay
     # off). Write/Edit only under OUT; denied in the workspace, on this kit, on
@@ -124,17 +300,49 @@ runs:
       id: review
       if: steps.facts.outputs.tier != '' && steps.facts.outputs.tier != 'none'
       continue-on-error: true
+      # Room for the Serena MCP server to start its language servers on a slow
+      # runner. Without Serena this only bounds MCP startup; there are no other
+      # MCP servers.
+      env:
+        MCP_TIMEOUT: "60000"
       uses: anthropics/claude-code-action@925afb53776cf1a2b738c6bdbed37b4d4000ef13 # v1.0.262
       with:
         claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
         settings: '{"disableAllHooks": true, "claudeMdExcludes": ["**/CLAUDE.md", "**/CLAUDE.local.md", "**/AGENTS.md"]}'
         prompt: |
           Follow ${{ runner.temp }}/pr-review/REVIEW.md, then the project addendum .pr-review/REVIEW.md. OUT=${{ runner.temp }}/pr-review. Base ${{ steps.paths.outputs.trust_sha }}, head ${{ github.event.pull_request.head.sha }}. Ignore the .review-base/, .review-publish/ and *.pr-head paths.
+          ${{ steps.serena.outputs.prompt }}${{ inputs.serena == 'on' && steps.serena.outputs.prompt == '' && 'Code navigation (Serena) was enabled for this run but did not start: say "code navigation unavailable" under ## Not reviewed / limits.' || '' }}
         claude_args: >-
           --model ${{ inputs.model }}
           --max-turns ${{ steps.facts.outputs.max_turns || 10 }}
           --setting-sources user
           --strict-mcp-config
           --add-dir ${{ runner.temp }}/pr-review
-          --allowedTools "Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/inline.json),Write(/${{ runner.temp }}/pr-review/findings.json),Write(/${{ runner.temp }}/pr-review/summary.md),Edit(/${{ runner.temp }}/pr-review/inline.json),Edit(/${{ runner.temp }}/pr-review/findings.json),Edit(/${{ runner.temp }}/pr-review/summary.md)"
-          --disallowedTools "Bash,MultiEdit,NotebookEdit,WebFetch,WebSearch,Skill,Task,Agent,mcp__github_inline_comment__create_inline_comment,mcp__github_inline_comment,mcp__github_comment,mcp__github_ci,mcp__github_file_ops,mcp__github,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Write(/${{ steps.paths.outputs.kit_root }}/**),Edit(/${{ steps.paths.outputs.kit_root }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Read(./.claude-pr/**),Read(/${{ github.workspace }}/.claude-pr/**),Read(/${{ github.workspace }}/.review-base/**),Read(/${{ github.workspace }}/.review-publish/**),Read(~/.*),Read(~/.*/**),Read(/${{ runner.temp }}/_github_workflow/**),Read(/${{ runner.temp }}/_github_home/**),Read(~/runners/**),Read(~/actions-runner/**),Read(//opt/actions-runner/**),SlashCommand,Read(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/prstate-snapshot/**),Edit(/${{ runner.temp }}/prstate-snapshot/**),Write(/${{ runner.temp }}/pr-review/.claude/**),Edit(/${{ runner.temp }}/pr-review/.claude/**)${{ steps.facts.outputs.extra_deny }}"
+          ${{ steps.serena.outputs.mcp_args }}
+          --allowedTools "${{ steps.facts.outputs.extra_allow }}${{ steps.serena.outputs.tools }}Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/inline.json),Write(/${{ runner.temp }}/pr-review/findings.json),Write(/${{ runner.temp }}/pr-review/summary.md),Edit(/${{ runner.temp }}/pr-review/inline.json),Edit(/${{ runner.temp }}/pr-review/findings.json),Edit(/${{ runner.temp }}/pr-review/summary.md)"
+          --disallowedTools "${{ steps.facts.outputs.model_shell != 'on' && 'Bash,' || '' }}MultiEdit,NotebookEdit,WebFetch,WebSearch,Skill,Task,Agent,mcp__github_inline_comment__create_inline_comment,mcp__github_inline_comment,mcp__github_comment,mcp__github_ci,mcp__github_file_ops,mcp__github,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Write(/${{ steps.paths.outputs.kit_root }}/**),Edit(/${{ steps.paths.outputs.kit_root }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Read(./.claude-pr/**),Read(/${{ github.workspace }}/.claude-pr/**),Read(/${{ github.workspace }}/.review-base/**),Read(/${{ github.workspace }}/.review-publish/**),Read(~/.*),Read(~/.*/**),Read(/${{ runner.temp }}/_github_workflow/**),Read(/${{ runner.temp }}/_github_home/**),Read(~/runners/**),Read(~/actions-runner/**),Read(//opt/actions-runner/**),SlashCommand,Read(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/prstate-snapshot/**),Edit(/${{ runner.temp }}/prstate-snapshot/**),Write(/${{ runner.temp }}/pr-review/.claude/**),Edit(/${{ runner.temp }}/pr-review/.claude/**)${{ steps.facts.outputs.extra_deny }}"
+
+    # No serena-runner process may outlive the review: one could tamper with the
+    # publish checkout or /tmp before the secret-bearing publish step. Publish
+    # refuses to run unless this records PR_REVIEW_SERENA_STOP=ok.
+    - name: Stop Serena
+      if: always()
+      shell: bash
+      run: |
+        if ! id serena-runner >/dev/null 2>&1; then
+          if [ -n "${PR_REVIEW_SERENA_STOP:-}" ]; then echo "PR_REVIEW_SERENA_STOP=ok" >> "$GITHUB_ENV"; fi
+          exit 0
+        fi
+        for _ in 1 2 3 4 5; do
+          # Re-kill each round: a process forked during the previous scan would survive one pkill.
+          sudo pkill -KILL -u serena-runner || true
+          sleep 1
+          if ! pgrep -u serena-runner >/dev/null; then
+            # Nothing serena-runner left in shared temp space survives into publish.
+            sudo find /tmp /var/tmp /dev/shm -xdev -user serena-runner -delete 2>/dev/null || true
+            echo "PR_REVIEW_SERENA_STOP=ok" >> "$GITHUB_ENV"
+            exit 0
+          fi
+        done
+        echo "::error::serena-runner processes survived; publish will refuse to run"
+        exit 1

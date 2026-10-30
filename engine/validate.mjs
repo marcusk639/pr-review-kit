@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { validateLearnWorkflow } from './learn/validate-learn.mjs';
 import { checkKitPin, checkWorkflow } from './lib/workflow-check.mjs';
 import { matches } from './lib/glob.mjs';
+import { checkSerenaConfig } from './lib/serena-check.mjs';
 
 const PATH_RE = /^[\w.-]+\/[\w./ -]+\.\w+(:\d+(-\d+)?)?$/;
 const KIT_ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -56,6 +57,10 @@ function checkReviewWorkflow(root, project, errors, warnings, kitDir) {
   const r = checkWorkflow(wf, { kind: 'review', securityChannel: project.config.securityChannel });
   errors.push(...r.errors);
   warnings.push(...r.warnings);
+  const serenaDir = join(root, PROJECT_SUBDIR, 'serena');
+  const serenaInput = r.steps.some((s) => /pr-review-kit\/actions\/review@/.test(s) && /^\s+serena:/m.test(s));
+  if (existsSync(serenaDir)) errors.push(...checkSerenaConfig(serenaDir));
+  else if (serenaInput) warnings.push('the review step passes serena but .pr-review/serena/ is missing (Serena will never start)');
   if (!r.kitSha) return;
   if (kitDir === false) warnings.push('kit pin not checked against a kit repository');
   else if (!existsSync(join(kitDir, '.git'))) warnings.push(`kit pin not checked: ${kitDir} is not a git checkout of the kit`);

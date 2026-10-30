@@ -1,7 +1,7 @@
 # How the automated PR review works
 
-**Version 1.0.0** · pr-review-kit · 2026-10-27 · Covers kit `main` at b6ae199 (consumers pin 098dcc7; the engine
-code is the same)
+**Version 1.1.0** · pr-review-kit · 2026-10-30 · Covers kit `main` after the recovery-platform migration
+(opt-in suggestions, model tools, Serena and reference files)
 
 ---
 
@@ -46,7 +46,7 @@ Section 11 is the index of every `.mjs` file; jump there when you need to know w
   engine change under them.
 - Runtime: Node 22 built-ins only. Nothing is installed when the actions run.
 - Current consumers: rag-system, doc-classifier, software-dev-team, karbon-dashboards, cpa-consulting,
-  claude-config, and recovery-platform (migration branch, not yet pushed).
+  claude-config, and recovery-platform (which also turns on every opt-in capability in section 5.4).
 
 **[NOTE]**
 The kit was extracted from recovery-platform's in-repo reviewer. Everything that was the same in every
@@ -147,7 +147,9 @@ a consumer's copy against it.
 | 6   | Neutralize PR head         | `engine/neutralize.mjs` (see 7.2)                                                                                                |
 | 7   | Facts                      | `engine/facts.mjs` (section 4). Outputs `tier`, `max_turns`, `extra_deny`                                                        |
 | 8   | External counterparts      | `engine/externals.mjs`: token-free checkouts of other public repos this project links into                                       |
-| 9   | Review                     | claude-code-action, only when tier is not `none`; `continue-on-error: true` (section 5)                                          |
+| 9   | Serena (opt-in)            | `Set up uv for Serena`, `Serena setup`: only with input `serena: on` (section 5.4); never fails the job                          |
+| 10  | Review                     | claude-code-action, only when tier is not `none`; `continue-on-error: true` (section 5)                                          |
+| 11  | Stop Serena                | `always()`: kills every `serena-runner` process; records `PR_REVIEW_SERENA_STOP=ok` only when none survives                      |
 
 Outputs to the workflow: `trust_sha`, `tier`, `outcome`, `execution_file`.
 
@@ -157,6 +159,7 @@ Outputs to the workflow: `trust_sha`, `tier`, `outcome`, `execution_file`.
 
 | #   | Step               | What it does                                                                                     |
 | --- | ------------------ | ------------------------------------------------------------------------------------------------ |
+| 0   | Serena stopped     | Fails (so Publish is skipped) when Serena ran and Stop Serena did not record `ok`                |
 | 1   | Clear publish path | Removes any `.review-publish` left in the workspace                                              |
 | 2   | Checkout trust SHA | A **fresh** checkout of the base commit to `.review-publish/`; the model never touched it        |
 | 3   | Publish            | `engine/run-publish.mjs` → `engine/publish.mjs` (section 6). Secrets enter the process here only |
@@ -186,8 +189,9 @@ What it produces:
 | `commits.txt`    | `OUT/`          | model      | The PR's commits                                                                        |
 | `REVIEW.md`      | `OUT/`          | model      | The kit's generic procedure (`engine/REVIEW.md`)                                        |
 | `state.json`     | `OUT/`          | model      | Prior ledger, acknowledged slugs, tier (convenience copy)                               |
-| trusted snapshot | `STATE_FILE`    | publish    | The same state, outside the model's reach. Publish trusts this, never `OUT/state.json`  |
-| step outputs     | `GITHUB_OUTPUT` | the action | `tier`, `max_turns`, `extra_deny` (Read denies for withheld paths)                      |
+| trusted snapshot | `STATE_FILE`    | publish    | The same state plus `hunkRanges` (RIGHT-side hunks per file), outside the model's reach |
+| `reference/`     | `OUT/`          | model      | `config.referenceFiles` copied from the trust SHA, `.ref` suffix (section 5.4)          |
+| step outputs     | `GITHUB_OUTPUT` | the action | `tier`, `max_turns`, `extra_deny` (withheld Read denies), `model_shell`, `extra_allow`  |
 
 ### 4.1 Prior state
 
@@ -269,7 +273,8 @@ turns one off.
   executing it), `mergeBase`.
 - A check that throws or times out becomes `pre-check unavailable: <name>` in `facts.md`.
 - Examples: `examples/consumer/.pr-review/checks/routes.mjs` (a new route with no client) and
-  `examples/recovery-platform/checks/*.mjs` (Firebase exports, regions, index and rules coverage, twin products).
+  recovery-platform's `.pr-review/checks/*.mjs` (Firebase exports, regions, index and rules coverage, twin
+  products).
 
 ---
 
@@ -280,16 +285,16 @@ turns one off.
 **[SPEC]**
 The `Review` step runs claude-code-action (pinned by SHA) with:
 
-| Setting                  | Effect                                                                                                                                                                                                                                                              |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--setting-sources user` | No project `.claude/settings*.json` is loaded                                                                                                                                                                                                                       |
-| `--strict-mcp-config`    | No MCP server from the repository                                                                                                                                                                                                                                   |
-| `disableAllHooks: true`  | No hooks run                                                                                                                                                                                                                                                        |
-| `claudeMdExcludes`       | `**/CLAUDE.md`, `**/CLAUDE.local.md`, `**/AGENTS.md` are not loaded as instructions                                                                                                                                                                                 |
-| `--allowedTools`         | `Read`, `Grep`, `Glob`, and `Write`/`Edit` of exactly `OUT/inline.json`, `OUT/findings.json`, `OUT/summary.md`                                                                                                                                                      |
-| `--disallowedTools`      | `Bash`, web tools, `Skill`, `Task`, `Agent`, every GitHub MCP/comment tool, `SlashCommand`, writes to the workspace or kit, reads of `.git`, `.claude-pr`, `.review-base`, `.review-publish`, `~/.*`, `/proc`, runner internals, plus `extra_deny` (withheld paths) |
-| `--max-turns`            | From the tier (4.2)                                                                                                                                                                                                                                                 |
-| `--add-dir OUT`          | The only directory outside the repository the model can reach                                                                                                                                                                                                       |
+| Setting                  | Effect                                                                                                                                                                                                                                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--setting-sources user` | No project `.claude/settings*.json` is loaded                                                                                                                                                                                                                                                             |
+| `--strict-mcp-config`    | No MCP server from the repository                                                                                                                                                                                                                                                                         |
+| `disableAllHooks: true`  | No hooks run                                                                                                                                                                                                                                                                                              |
+| `claudeMdExcludes`       | `**/CLAUDE.md`, `**/CLAUDE.local.md`, `**/AGENTS.md` are not loaded as instructions                                                                                                                                                                                                                       |
+| `--allowedTools`         | `Read`, `Grep`, `Glob`, and `Write`/`Edit` of exactly `OUT/inline.json`, `OUT/findings.json`, `OUT/summary.md`; plus facts' `extra_allow` and Serena's four tools when a project opts in (5.4)                                                                                                            |
+| `--disallowedTools`      | `Bash` (unless facts emits `model_shell=on`), web tools, `Skill`, `Task`, `Agent`, every GitHub MCP/comment tool, `SlashCommand`, writes to the workspace or kit, reads of `.git`, `.claude-pr`, `.review-base`, `.review-publish`, `~/.*`, `/proc`, runner internals, plus `extra_deny` (withheld paths) |
+| `--max-turns`            | From the tier (4.2)                                                                                                                                                                                                                                                                                       |
+| `--add-dir OUT`          | The only directory outside the repository the model can reach                                                                                                                                                                                                                                             |
 
 ### 5.2 What the model is told
 
@@ -340,6 +345,26 @@ The model has no way to post. If `findings.json` is missing, malformed or lacks 
 posts "review did not complete (reason), will retry on next push" with the prior ledger, and nothing from that
 run's findings.
 
+### 5.4 Opt-in capabilities
+
+**[SPEC]**
+Every one is off by default; a project turns it on in its trusted config (or, for Serena, the workflow input).
+
+| Capability      | Turn on                                          | What changes                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Medium inline   | `inline.severities` includes `Medium`            | Medium findings may get inline comments. Critical and High entries are always placed first under `inline.max`; only Critical/High drops are announced                                                                                                                                                                                                                        |
+| Suggestions     | `inline.suggestions.enabled: true`               | An `inline.json` entry may carry `start_line` and `suggestion`. Publish fences it only inside one trusted hunk, within the size caps, never on `.github/**`, `.pr-review/**`, any `.claude/`, manifests, lockfiles, `blockedPaths`, or paths routed to a security class or `blockedClasses`                                                                                  |
+| gh read         | `model.ghRead: true`                             | `Bash(gh pr diff:*)` and `Bash(gh pr view:*)`, nothing else. Not allowed with `withheld` paths (the diff would show them)                                                                                                                                                                                                                                                    |
+| Reply           | `model.reply: true`                              | `Bash(node <kit>/engine/reply.mjs)` and `Write`/`Edit` of `OUT/reply.md`. One comment per run, refused unless it starts `pr-review:` and names no secret, security slug or file, withheld path, or (while the ledger has a security entry) any file. Publish re-checks it against the final findings and prior security files and deletes it if it leaks (`reply-guard.mjs`) |
+| Serena          | action input `serena: on` + `.pr-review/serena/` | Four read-only lookups through an MCP server run as `serena-runner`: empty environment, no network (iptables), a root-owned copy of tracked files minus `serena.exclude` and `withheld`; isolation probes before any output; publish refuses if a process survives                                                                                                           |
+| Reference files | `referenceFiles: [globs]`                        | Matching files at the trust SHA are copied to `OUT/reference/` (`.ref`, `.claude` → `dot-claude`) and listed in `facts.md` as data                                                                                                                                                                                                                                           |
+
+**[NOTE]**
+The reply is the one exception to "the model never posts". It goes through kit code from the pinned action path,
+which reads the project from the trust checkout, the body only from `OUT/reply.md` (never a symlink), and the
+target only from the event file, so the model cannot post a file it names. recovery-platform asked for it; other
+projects should leave it off unless maintainers ask the reviewer questions in PR comments.
+
 ---
 
 ## 6. Publish: what gets posted, and how
@@ -368,11 +393,13 @@ token (the only place in the engine that reads secrets), then calls `publish()`.
 An entry from `inline.json` is posted only if all hold (`inline-post.mjs`):
 
 - Its slug is a **non-security** finding in `findings.json` whose severity is in `config.inline.severities`
-  (default Critical, High), and the summary would not withhold it.
+  (default Critical, High), and the summary would not withhold it. Critical and High entries are considered
+  first.
 - Its path is one of the PR's changed files (facts' trusted list), and not a withheld path.
 - No inline comment with that slug exists yet.
 - `unsafeInline()` passes on the exact body: no secret pattern, no security-file mention.
 - At most `config.inline.max` (default 10) per run; body capped at 4000 characters.
+- A `suggestion` survives only under the rules in 5.4; when it fails, the comment posts without it.
 
 Publish appends the `fp` marker itself and posts all survivors as one PR review. Afterwards `inline-guard.mjs`
 **deletes** any of this run's `github-actions[bot]` review comments that carry a security fingerprint, no
@@ -447,6 +474,8 @@ only in the publish step.
 | A security finding becomes public                                       | Pointer-only summary, private channel, HMAC ids, needle withholding                                     | section 6.3–6.4                             |
 | Feedback text instructs the reviewer                                    | Feedback is quoted data; instruction-shaped text is never a lesson candidate                            | `feedback.mjs`, `candidates.mjs`            |
 | A pusher forges a learning PR to skip self-edit review                  | Exemption needs API-verified bot author and committer **and** a GitHub-verified signature               | `learning-pr.mjs`                           |
+| The model's reply leaks detail or posts a chosen file (opt-in)          | Kit-owned command, body only from `OUT/reply.md`, refusal rules, one per run                            | `reply.mjs`, `reply-guard.mjs`              |
+| Serena reads credentials or phones home (opt-in)                        | Separate user, empty env, iptables, chmod 700 on `.git`/`RUNNER_TEMP`, probes; publish stop guard       | review action, `serena-prep.mjs`            |
 | Secrets in logs                                                         | Logs carry status codes and counts only; tokens never on command lines                                  | every publishing module                     |
 
 ### 7.2 Neutralizing the PR head
@@ -584,8 +613,11 @@ Main `config.json` keys:
 | `tiers`                             | `set`, `disabled`, `maxTurns`, `largeShare` (0.5)                                                                                                                            |
 | `lightFiles`, `lightExclude`        | What counts as a light change                                                                                                                                                |
 | `withheld`                          | Globs the model never reads                                                                                                                                                  |
+| `referenceFiles`                    | Globs copied from the trust SHA to `OUT/reference/` as data (5.4)                                                                                                            |
+| `model`                             | `ghRead`, `reply` (both false): opt-in model tools (5.4)                                                                                                                     |
+| `serena`                            | `exclude`: directory names left out of Serena's source copy                                                                                                                  |
 | `externalCheckouts`                 | Other public repos to check out token-free as counterparts                                                                                                                   |
-| `inline`                            | `max` (10), `severities` (Critical, High)                                                                                                                                    |
+| `inline`                            | `max` (10), `severities` (Critical, High), `suggestions` (`enabled` false, `blockedPaths`, `blockedClasses`, `maxLines`, `maxChars`, `maxRangeLines`)                        |
 | `secrets`                           | `extraPatterns`, `allowPaths`, `allowPatterns`                                                                                                                               |
 | `checks`                            | Built-in check settings, `project` module list, `timeoutMs` (20000)                                                                                                          |
 | `style`                             | `noEmoji`, `noEmDash` for posted text                                                                                                                                        |
@@ -620,7 +652,7 @@ recovery-platform's original reviewer wherever it had a setting.
 ## 11. Index of `.mjs` files
 
 **[SPEC]**
-69 non-test modules. Lines are approximate. "Entry" marks a file run directly by an action or a person.
+74 non-test modules. Lines are approximate. "Entry" marks a file run directly by an action or a person.
 
 ### 11.1 `bin/` (command-line tools)
 
@@ -641,6 +673,8 @@ recovery-platform's original reviewer wherever it had a setting.
 | `engine/publish.mjs`     | Orchestrates publish: stale-run guard, completion, inline stage, private delivery, ledger, summary                              |
 | `engine/advisories.mjs`  | Delivers security findings as draft repository security advisories (public repos)                                               |
 | `engine/validate.mjs`    | Consumer self-check behind `pr-review.mjs validate`                                                                             |
+| `engine/reply.mjs`       | Entry (opt-in). The model's one reply per run; loads the project from the trust checkout                                        |
+| `engine/serena-prep.mjs` | Entry (opt-in). Serena's source-copy file list and language-server warmup files                                                 |
 
 ### 11.3 `engine/learn/` (learning pipeline)
 
@@ -698,6 +732,8 @@ Grouped by concern.
 | `check-child.mjs`    | The forked child: loads one check module and reports results over IPC                         |
 | `parse-only.mjs`     | Does this text parse? Runs a parser in isolation without executing the content                |
 | `facts-render.mjs`   | Renders `facts.md`, bounded                                                                   |
+| `reference.mjs`      | Copies `config.referenceFiles` from the trust SHA to `OUT/reference/`                         |
+| `serena-check.mjs`   | `validate`'s checks on a consumer's `.pr-review/serena/` config                               |
 | `learning-pr.mjs`    | Decides whether a PR is a genuine learning PR (API verification plus content check)           |
 | `workflow-check.mjs` | Text checks on a consumer's workflows and the kit pin (no YAML parser)                        |
 
@@ -728,6 +764,10 @@ Grouped by concern.
 | File               | Purpose                                                                          |
 | ------------------ | -------------------------------------------------------------------------------- |
 | `inline-post.mjs`  | Selects eligible entries from `inline.json` and posts them as one PR review      |
+| `suggestion.mjs`   | Suggestion rules: blocked paths and classes, one-hunk range, size, fence         |
+| `hunks.mjs`        | RIGHT-side hunk ranges of the PR diff, for the trusted snapshot                  |
+| `reply.mjs`        | The reply's refusal rules and one-per-run lock (`engine/reply.mjs` runs it)      |
+| `reply-guard.mjs`  | Publish's post-hoc check: deletes this run's reply if it names a security file   |
 | `inline-guard.mjs` | Pre-filter (`unsafeInline`) and post-hoc deletion of unsafe bot inline comments  |
 | `inline-stage.mjs` | Runs post-then-guard and returns posted slugs and notices for the summary        |
 | `render.mjs`       | Renders the one public summary comment (redacted, marker-safe, capped)           |
@@ -746,12 +786,9 @@ Grouped by concern.
 
 ### 11.6 `examples/`
 
-| File                                                        | Purpose                                                                       |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `examples/consumer/.pr-review/checks/routes.mjs`            | Example project check: a route string added in `src/` that no client mentions |
-| `examples/recovery-platform/checks/index.mjs`               | recovery-platform's check entry (`config.checks.project`)                     |
-| `examples/recovery-platform/checks/contracts.mjs`           | Cloud Function exports, regions, and homegroups/regroup twin files            |
-| `examples/recovery-platform/checks/contracts-firestore.mjs` | Firestore queries vs indexes, storage paths, collections vs rules             |
+| File                                             | Purpose                                                                       |
+| ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `examples/consumer/.pr-review/checks/routes.mjs` | Example project check: a route string added in `src/` that no client mentions |
 
 **[NOTE]**
 Non-`.mjs` engine files that matter as much as the code: `engine/REVIEW.md` (the model's review procedure),
@@ -764,8 +801,8 @@ permissions and the sandbox flags).
 
 **[SPEC]**
 
-- `npm test` runs `node --test` over `engine/test/*.test.mjs` (64 files, learning modules included) and
-  `examples/recovery-platform/checks/test/*.test.mjs` (1 file).
+- `npm test` runs `node --test` over `engine/test/*.test.mjs` (learning modules included). recovery-platform's
+  contract checks and their tests live in that repository's `.pr-review/checks/`.
 - Most modules are pure or take injected dependencies (GitHub calls, git), so tests run offline.
 - Each consumer also tests its own project checks (`.pr-review/checks/test/` or the repo's test runner).
 
@@ -823,6 +860,7 @@ Fix: push again or re-run the job later; the prior ledger is kept. Raise `tiers.
 
 ## 15. Changelog
 
-| Version | Date       | Change                                                             |
-| ------- | ---------- | ------------------------------------------------------------------ |
-| 1.0.0   | 2026-10-27 | First version: pipeline, security model, learning loop, file index |
+| Version | Date       | Change                                                                                                                                                                       |
+| ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1.0   | 2026-10-30 | Opt-in capabilities (5.4) ported from recovery-platform: suggestions and Medium inline, gh read, reply, Serena, reference files; the lost-comments notice names `inline.max` |
+| 1.0.0   | 2026-10-27 | First version: pipeline, security model, learning loop, file index                                                                                                           |

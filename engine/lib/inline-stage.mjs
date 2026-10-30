@@ -7,12 +7,14 @@ import { sanitizeLedger } from './ledger.mjs';
 import { BOT_AUTHOR, extractInlineSlugs } from './markers.mjs';
 import { candidatePaths, isPriorSecurityPath, priorFileIds, runNeedles } from './fileids.mjs';
 import { guardInlineComments } from './inline-guard.mjs';
-import { inlineEligible, newDrops, postInlineReview, readInline, selectInline } from './inline-post.mjs';
+import { announced, inlineEligible, newDrops, postInlineReview, readInline, selectInline } from './inline-post.mjs';
+import { sanitizeHunkRanges } from './hunks.mjs';
+import { activeProject } from './config.mjs';
 
 export const INLINE_NOTICE = '> an inline comment could not be removed automatically; please review';
 export const INLINE_POST_NOTICE = '> some inline comments could not be posted';
 export const INLINE_READ_NOTICE = '> inline.json could not be read; no inline comments were posted';
-export const lostNotice = (n) => `> ${n} inline comment(s) for Critical or High findings were not posted (malformed, outside the PR's changed files, or over the limit of 10); those findings are listed below`;
+export const lostNotice = (n, max = activeProject().config.inline.max) => `> ${n} inline comment(s) for Critical or High findings were not posted (malformed, outside the PR's changed files, or over the limit of ${max}); those findings are listed below`;
 
 const isObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 const status = (err) => (Number.isInteger(err?.status) ? err.status : 'unknown');
@@ -20,7 +22,7 @@ const strings = (l) => (Array.isArray(l) ? l.filter((s) => typeof s === 'string'
 
 // Current security findings' files, plus any path (a changed file, or a
 // path-like token of a body) hashing to a prior security fileId (keyed only).
-function securityPathTest(findings, snapshot, key) {
+export function securityPathTest(findings, snapshot, key) {
   const ids = priorFileIds(sanitizeLedger(isObject(snapshot) ? snapshot.ledger : [], key));
   const needles = runNeedles(findings, [], ids, key, strings(snapshot?.changedFiles));
   const namesPrior = (t) => candidatePaths([], [t]).some((p) => isPriorSecurityPath(p, ids, key));
@@ -57,16 +59,17 @@ export async function runInline({ repo, pr, snapshot, findings, inlineText, idKe
       findings,
       changedFiles: strings(snapshot?.changedFiles),
       postedSlugs: extractInlineSlugs(ours),
+      hunkRanges: sanitizeHunkRanges(isObject(snapshot) ? snapshot.hunkRanges : null),
       isSecurityPath,
       needles,
       drops,
     });
-    // Invalid entries count as lost only when they name an eligible finding.
-    const eligible = new Set(findings.filter((f) => inlineEligible(f, needles)).map((f) => f.slug));
+    // Invalid entries count as lost only when they name an eligible Critical/High finding.
+    const eligible = new Set(findings.filter((f) => inlineEligible(f, needles) && announced(f)).map((f) => f.slug));
     // A slug whose comment was kept from another entry is not lost.
     const kept = new Set(comments.map((c) => c.slug));
     const lost = new Set([...drops.lost, ...read.invalidSlugs.filter((s) => eligible.has(s))].filter((s) => !kept.has(s)));
-    console.log(`inline select: kept ${comments.length}, invalid ${read.invalid}, not-a-finding ${drops.notFinding}, ineligible ${drops.ineligible}, already-posted ${drops.duplicate}, outside-changed-files ${drops.path}, unsafe ${drops.unsafe}, over-cap ${drops.overCap}`);
+    console.log(`inline select: kept ${comments.length}, invalid ${read.invalid}, not-a-finding ${drops.notFinding}, ineligible ${drops.ineligible}, already-posted ${drops.duplicate}, outside-changed-files ${drops.path}, unsafe ${drops.unsafe}, over-cap ${drops.overCap}, own-fence ${drops.fence}, suggestion-dropped ${drops.suggestionDropped}${Object.keys(drops.suggestionReasons).length ? ` (${Object.entries(drops.suggestionReasons).map(([k, n]) => `${k}: ${n}`).join(', ')})` : ''}`);
     if (read.malformed) notices.push(INLINE_READ_NOTICE);
     if (lost.size) notices.push(lostNotice(lost.size));
     notPosted += lost.size + (read.malformed ? 1 : 0);

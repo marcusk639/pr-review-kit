@@ -32,6 +32,9 @@ Key properties:
 - **Incremental.** Each push gets a tier (`none`, `light`, `base-drift`, `incremental`, `incremental-new-links`,
   `full`) sized to what changed since the last review.
 - **It learns, under review.** Feedback becomes memory only through a learning PR you merge.
+- **Opt-in extras, off by default.** One-click suggestions and Medium inline comments, `gh pr view/diff` and one
+  checked reply for the model, isolated Serena code navigation, and base-branch reference copies of `CLAUDE.md`
+  files ([how-it-works 5.4](docs/how-it-works.md#54-opt-in-capabilities)). recovery-platform uses all of them.
 
 ## Documentation
 
@@ -76,7 +79,6 @@ Key properties:
 | `bin/pr-review.mjs`                 | Consumer CLI: `validate`, `local`, `learn`                                                         |
 | `bin/enable-repo.mjs`               | Enables a consumer repository on GitHub, step by step                                              |
 | `examples/consumer/`                | A complete minimal consumer: workflows, config, knowledge, a project check                         |
-| `examples/recovery-platform/`       | recovery-platform's contract checks as project checks, and a config reproducing the reference      |
 
 Node 22 built-ins only; nothing is installed at runtime.
 

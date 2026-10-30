@@ -1,0 +1,22 @@
+# Global Serena config for the PR reviewer (spec 2026-10-26 §3.1), installed as
+# $SERENA_HOME/serena_config.yml. Keys are from serena-agent 1.7.0's template.
+language_backend: LSP
+gui_log_window: false
+web_dashboard: false
+web_dashboard_open_on_launch: false
+log_level: 30
+trace_lsp_communication: false
+# Pinned here, not in project.yml: project-level ls_specific_settings apply only to
+# trusted projects, and no project is trusted.
+ls_specific_settings:
+  typescript:
+    typescript_version: "5.9.3"
+    typescript_language_server_version: "5.1.3"
+token_count_estimator: CHAR_COUNT
+# Explicitly empty: when the key is absent Serena falls back to its template default
+# (interactive, editing), and base modes are always active, even alongside --mode.
+base_modes: []
+# No trusted projects: a project's activation_command and project-level language
+# server settings never run.
+trusted_project_path_patterns: []
+projects: []
