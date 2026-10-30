@@ -4,7 +4,34 @@
 // and exactly one prompt template overriding connection_prompt.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { languageServers, WARMUP } from '../serena-prep.mjs';
+
+// A file per language server, so each server is downloaded while the network
+// is still on; none can be fetched once it is blocked.
+export const WARMUP = {
+  typescript: ['warmup.ts', 'export const warmup = 1;\n'],
+  markdown: ['warmup.md', '# Warmup\n\nText.\n'],
+  yaml: ['warmup.yaml', 'warmup: true\n'],
+  json: ['warmup.json', '{ "warmup": true }\n'],
+  python: ['warmup.py', 'warmup = 1\n'],
+  bash: ['warmup.sh', 'warmup=1\n'],
+};
+
+// language_servers from project.yml, inline ([a, b]) or as a block list.
+export function languageServers(yml) {
+  const text = String(yml ?? '');
+  const inline = /^language_servers:[ \t]*\[([^\]\n]*)\]/m.exec(text);
+  const raw = inline
+    ? inline[1].split(',')
+    : (/^language_servers:[ \t]*\n((?:[ \t]*-[^\n]*\n?)+)/m.exec(text)?.[1] ?? '').split('\n').map((l) => l.replace(/^\s*-\s*/, ''));
+  return raw.map((s) => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+}
+
+export function warmupFiles(languages) {
+  if (!languages.length) throw new Error('project.yml lists no language_servers');
+  const unknown = languages.filter((l) => !(l in WARMUP));
+  if (unknown.length) throw new Error(`no warmup file for language server(s): ${unknown.join(', ')}`);
+  return languages.map((l) => WARMUP[l]);
+}
 
 export const SERENA_TOOLS = ['find_symbol', 'find_referencing_symbols', 'get_symbols_overview', 'search_for_pattern'];
 // Keys that would run code or widen the tool set.

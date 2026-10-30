@@ -19,7 +19,7 @@ const stepOf = (yml, name) => {
 // The tool lists as they stand when facts emits no opt-in tools (config.model
 // off, or facts never ran): the opt-in expressions are checked on their own below.
 const EXTRA_ALLOW = '${{ steps.facts.outputs.extra_allow }}';
-const SHELL_DENY = "${{ steps.facts.outputs.model_shell == 'on' && '' || 'Bash,' }}";
+const SHELL_DENY = "${{ steps.facts.outputs.model_shell != 'on' && 'Bash,' || '' }}";
 const rawAllow = /--allowedTools "([^"]+)"/.exec(review)?.[1] ?? '';
 const rawDeny = /--disallowedTools "([^"]+)"/.exec(review)?.[1] ?? '';
 const SERENA_TOOLS = '${{ steps.serena.outputs.tools }}';
@@ -31,6 +31,12 @@ test('opt-in model tools: only facts adds allow rules, and Bash is denied unless
   assert.equal(rawAllow.split(EXTRA_ALLOW).length, 2);
   assert.ok(rawDeny.startsWith(SHELL_DENY), 'an unset or other model_shell output keeps Bash denied');
   assert.equal((review.match(/steps\.facts\.outputs\.model_shell/g) ?? []).length, 1);
+  // Evaluate it as GitHub does ('' is falsy; a missing output is ''): an
+  // `x && '' || y` form would always yield y.
+  const expr = /^\$\{\{ (.*) \}\}$/.exec(SHELL_DENY)[1].replace('steps.facts.outputs.model_shell', 'v').replace('!=', '!==');
+  const evaluate = new Function('v', `return ${expr};`);
+  assert.equal(evaluate('on'), '', 'Bash allowed only when model_shell is on');
+  for (const v of ['off', '', 'ON ', 'yes']) assert.equal(evaluate(v), 'Bash,', JSON.stringify(v));
 });
 
 test('Run start sets OUT, STATE_FILE and RUN_STARTED_AT through GITHUB_ENV before facts and the model', () => {

@@ -5,7 +5,7 @@ import './helpers/rp.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { copyList, languageServers, warmupFiles, WARMUP } from '../serena-prep.mjs';
+import { copyList, languageServers, projectCopyList, warmupFiles, WARMUP } from '../serena-prep.mjs';
 import { normalizeConfig } from '../lib/config.mjs';
 
 const read = (p) => readFileSync(new URL(`../../actions/${p}`, import.meta.url), 'utf8');
@@ -71,7 +71,8 @@ test('config comes from the trust checkout; Serena indexes a copy, never the wor
   assert.match(setup, /--project "\$SR_HOME\/src"/);
   assert.doesNotMatch(setup, /--project "?\$\{?GITHUB_WORKSPACE/);
   assert.match(setup, /node "\$KIT_ROOT\/engine\/serena-prep\.mjs" files \\\n\s+\| sudo rsync [^\n]*--ignore-missing-args --from0 --files-from=- \.\/ "\$SR_HOME\/src\/"/);
-  const base = at('.review-base/.pr-review/ "$SR_HOME/src/.pr-review/"');
+  assert.match(setup, /node "\$KIT_ROOT\/engine\/serena-prep\.mjs" project-files \\\n\s+\| sudo rsync [^\n]*--from0 --files-from=- \.review-base\/ "\$SR_HOME\/src\/"/, 'the trust .pr-review/ copy is filtered too');
+  const base = at('--files-from=- .review-base/ "$SR_HOME/src/"');
   assert.ok(at('--files-from=-') < base && base < at('sudo chown -R root:root "$SR_HOME/src"'));
   assert.ok(at('sudo chown -R root:root "$SR_HOME/src"') < at('sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/src/.serena"'));
   assert.ok(at('--files-from=-') < at('sudo install -o "$SR_USER" -m 600 "$cfg/project.yml" "$SR_HOME/src/.serena/project.yml"'));
@@ -102,6 +103,12 @@ test('language servers install against a throwaway project; PR code is indexed o
   }
   assert.match(setup, /rel_temp="\$\(realpath --relative-to="\$PWD" "\$RUNNER_TEMP"\)"/);
   assert.doesNotMatch(setup, /chmod [^\n]*\/home\/runner|setfacl/, '/home/runner is never opened up');
+});
+
+test("a trust-SHA Serena config that fails validate's rules is never installed", () => {
+  const check = at('if ! node "$KIT_ROOT/engine/serena-prep.mjs" check; then');
+  assert.ok(check < at('sudo useradd') && check < at('uv tool install'));
+  assert.match(setup.slice(check), /^if ! node [^\n]*\n[^\n]*::warning::[^\n]*\n\s+exit 0\n/);
 });
 
 test('exactly one base prompt template must override connection_prompt, or Serena stays off', () => {
@@ -157,4 +164,10 @@ test('languageServers reads inline and block lists; warmupFiles covers each or f
   assert.deepEqual(warmupFiles(['typescript', 'yaml']), [WARMUP.typescript, WARMUP.yaml]);
   assert.throws(() => warmupFiles(['rust']), /no warmup file for language server\(s\): rust/);
   assert.throws(() => warmupFiles([]), /no language_servers/);
+});
+
+test('projectCopyList keeps the trust .pr-review/ minus Serena state and withheld paths', () => {
+  const c = config(undefined, ['.pr-review/private/**']);
+  const paths = ['.pr-review/REVIEW.md', '.pr-review/serena/project.yml', '.pr-review/.serena/cache', '.pr-review/private/notes.md', 'src/a.ts', ''];
+  assert.deepEqual(projectCopyList(paths, c), ['.pr-review/REVIEW.md', '.pr-review/serena/project.yml']);
 });

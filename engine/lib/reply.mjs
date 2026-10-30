@@ -78,7 +78,8 @@ const namesFile = (p) => p.parts.length > 1 || FILE_EXT.has(String(p.parts.at(-1
 
 function priorSecurityMayApply(env, fs) {
   if (!env.STATE_FILE) return true;
-  const r = readRegular(env.STATE_FILE, 5_000_000, 'state file', fs);
+  // The snapshot also carries hunk ranges (up to 3000 files x 500 hunks), so the cap is generous.
+  const r = readRegular(env.STATE_FILE, 64_000_000, 'state file', fs);
   if (r.error) return true;
   try {
     const s = JSON.parse(r.text);
