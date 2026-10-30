@@ -27,6 +27,7 @@ import { mergeFromBase, writeCollaborators } from './lib/repo-facts.mjs';
 import { verifyLearningPr } from './lib/learning-pr.mjs';
 import { isEdited } from './lib/feedback.mjs';
 import { buildFacts } from './lib/facts-render.mjs';
+import { writeReference } from './lib/reference.mjs';
 import { checkSecrets, checkPiiLogs, checkNewFileSize, checkTitleScope, checkSelfEdit, checkEnginePin, runVerifyDiff } from './hygiene.mjs';
 
 export { buildFacts };
@@ -258,9 +259,10 @@ async function main() {
     const results = [...checked, ...repoChecks, ...(tier === 'none' ? [] : loadFailures)];
     mkdirSync(out, { recursive: true });
     if (tier !== 'none') recordMaterial(state, writeMaterial(out, { baseSha: BASE_SHA, headSha: HEAD_SHA, tier, incrementText: inc.incrementText, cwd: repoRoot }));
+    const reference = tier === 'none' ? null : writeReference(out, BASE_SHA, repoRoot, project);
     const routeResult = route(factPaths);
     recordRun(state, tier, routeResult, results);
-    const text = buildFacts({ files, routeResult, results, prContext, title: PR_TITLE, tier, driftFiles: inc.driftFiles, project, feedback: state.feedback });
+    const text = buildFacts({ files, routeResult, results, prContext, title: PR_TITLE, tier, driftFiles: inc.driftFiles, project, feedback: state.feedback, reference });
     writeOutputs(run, text, state);
   } catch (err) {
     process.stdout.write(`facts failed: ${err?.name ?? 'Error'}\n`);

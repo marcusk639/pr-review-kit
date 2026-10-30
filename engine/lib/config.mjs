@@ -30,6 +30,8 @@ export const DEFAULTS = Object.freeze({
   lightFiles: ['**/*.md', '**/*.txt', '**/*.png', '**/*.jpg', '**/*.svg', '**/pnpm-lock.yaml', '**/package-lock.json', '**/yarn.lock'],
   lightExclude: [],
   withheld: [],
+  // Base-branch files copied to OUT/reference/ as data (lib/reference.mjs).
+  referenceFiles: [],
   externalCheckouts: [],
   largePr: { files: 60, lines: 5000 },
   inline: { max: 10, severities: ['Critical', 'High'], suggestions: { enabled: false, blockedPaths: [], blockedClasses: [], maxLines: 40, maxChars: 4000, maxRangeLines: 40 } },
@@ -96,6 +98,7 @@ const SCHEMA = obj({
   lightFiles: globs,
   lightExclude: globs,
   withheld: globs,
+  referenceFiles: globs,
   externalCheckouts: list(checkoutNode),
   largePr: obj({ files: int(1, 100000), lines: int(1, 10000000) }),
   inline: obj({
