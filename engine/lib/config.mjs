@@ -34,6 +34,9 @@ export const DEFAULTS = Object.freeze({
   largePr: { files: 60, lines: 5000 },
   inline: { max: 10, severities: ['Critical', 'High'], suggestions: { enabled: false, blockedPaths: [], blockedClasses: [], maxLines: 40, maxChars: 4000, maxRangeLines: 40 } },
   secrets: { extraPatterns: [], allowPaths: [], allowPatterns: [] },
+  // Opt-in model tools beyond Read/Grep/Glob: gh pr view/diff of this PR, and one
+  // checked reply per run (engine/reply.mjs).
+  model: { ghRead: false, reply: false },
   issueBody: { extraPatterns: [] },
   style: { noEmoji: false, noEmDash: false },
   checks: {
@@ -98,6 +101,7 @@ const SCHEMA = obj({
     suggestions: obj({ enabled: bool, blockedPaths: globs, blockedClasses: list(int(1, 999)), maxLines: int(1, 200), maxChars: int(1, 20000), maxRangeLines: int(1, 200) }),
   }),
   secrets: obj({ extraPatterns: list(regex), allowPaths: globs, allowPatterns: list(regex) }),
+  model: obj({ ghRead: bool, reply: bool }),
   issueBody: obj({ extraPatterns: list(regex) }),
   style: obj({ noEmoji: bool, noEmDash: bool }),
   checks: obj({
@@ -145,6 +149,8 @@ export function normalizeConfig(raw) {
   checkClasses(c.classes, errors);
   const ids = classIds(c);
   for (const k of c.inline.suggestions.blockedClasses) if (!ids.has(k)) errors.push(`inline.suggestions.blockedClasses: class ${k} is not configured`);
+  // gh pr diff would show the model the files config.withheld keeps from it.
+  if (c.model.ghRead && c.withheld.length) errors.push('model.ghRead cannot be combined with withheld paths: gh pr diff would show them to the model');
   // One glob dialect both the diff stub and the model's Read deny agree on.
   for (const g of c.withheld) if (!SAFE_GLOB(g)) errors.push(`withheld: ${JSON.stringify(g)} cannot be expressed as a Read deny; use relative paths of ASCII letters, digits, . _ - and * ? (** only as a whole segment), e.g. "Caf*/**"`);
   for (const f of c.learning.forbidden) if (!/[*?]/.test(f) && !c.knowledge.includes(f)) errors.push(`learning.forbidden: ${f} is neither a glob nor a knowledge file (names are relative to .pr-review/)`);

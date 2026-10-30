@@ -3,6 +3,7 @@
 // on earlier findings (as quoted data) and the trusted PR context. Bounded.
 import { redact } from './redact.mjs';
 import { hidePath, hidePathsIn } from './withheld.mjs';
+import { fileURLToPath } from 'node:url';
 
 const MAX_BYTES = 40000;
 const MAX_PER_CHECK = 30;
@@ -11,6 +12,8 @@ const MAX_CONTEXT = 12000;
 const MAX_TITLE = 300;
 const MAX_FEEDBACK = 6000;
 const bytes = (s) => Buffer.byteLength(s);
+const REPLY_CMD = fileURLToPath(new URL('../reply.mjs', import.meta.url));
+
 export const list = (xs) => (xs.length ? xs.map((x) => `- ${x}`).join('\n') : '- none');
 
 export function clip(text, max) {
@@ -67,6 +70,7 @@ function projectSection(project) {
     `Large PR: more than ${c.largePr.files} files or ${c.largePr.lines} lines.`,
     `Inline comments: ${c.inline.severities.join(', ')} findings only; at most ${c.inline.max} per run.`,
     suggestionsLine(c.inline.suggestions, c),
+    `Shell: ${c.model.ghRead ? '`gh pr view` and `gh pr diff` for this PR' : 'none'}. Reply command: ${c.model.reply ? `\`node ${REPLY_CMD}\`` : 'off'}.`,
     ...(c.withheld.length ? [`Withheld paths (denied to you, stubbed in the diff): ${c.withheld.join(', ')}`] : []),
     ...(demoted.length ? [`Demoted classes (low precision; report only at high confidence, no inline comment): ${demoted.join(', ')}`] : []),
     '',

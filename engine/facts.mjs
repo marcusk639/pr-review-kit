@@ -91,11 +91,34 @@ async function runChecks({ files, repoRoot, baseSha, headSha, title, baseDir, pr
 }
 
 let tierWritten = false;
+const NO_TOOLS = { shell: 'off', allow: '' };
 // The review step runs only when this wrote a tier other than none. extra_deny
-// carries the model's Read denies for config.withheld paths.
-function tierOutput(tier, maxTurns, extraDeny = '') {
+// carries the model's Read denies for config.withheld paths; model_shell and
+// extra_allow the opt-in tools (modelTools). The action denies Bash unless
+// model_shell is exactly "on", so an unwritten output fails closed.
+function tierOutput(tier, maxTurns, extraDeny = '', tools = NO_TOOLS) {
   tierWritten = true;
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `tier=${tier}\nmax_turns=${maxTurns}\nextra_deny=${extraDeny ? `,${extraDeny}` : ''}\n`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `tier=${tier}\nmax_turns=${maxTurns}\nextra_deny=${extraDeny ? `,${extraDeny}` : ''}\nmodel_shell=${tools.shell}\nextra_allow=${tools.allow}\n`);
+}
+
+// Tool rules must be one plain path: no comma, parenthesis, space or quote
+// could then add a rule of its own.
+const PLAIN_PATH = /^\/[A-Za-z0-9_./-]+$/;
+
+// config.model's opt-in tools as allow rules (each followed by a comma, as the
+// action prepends them): the exact gh read commands, and the reply command plus
+// a write rule for OUT/reply.md. engineDir and out are absolute paths.
+export function modelTools(config, { engineDir = ENGINE_DIR, out } = {}) {
+  const { ghRead, reply } = config.model;
+  if (!ghRead && !reply) return NO_TOOLS;
+  if (!PLAIN_PATH.test(engineDir) || !PLAIN_PATH.test(String(out ?? ''))) {
+    process.stdout.write('facts: model tools disabled (engine or OUT path is not plain)\n');
+    return NO_TOOLS;
+  }
+  const allow = [];
+  if (ghRead) allow.push('Bash(gh pr diff:*)', 'Bash(gh pr view:*)');
+  if (reply) allow.push(`Bash(node ${engineDir}/reply.mjs)`, `Write(/${out}/reply.md)`, `Edit(/${out}/reply.md)`);
+  return { shell: 'on', allow: allow.map((t) => `${t},`).join('') };
 }
 
 const UNAVAILABLE_RE = /(^|\s)unavailable(:|$)/;
@@ -126,7 +149,7 @@ function writeOutputs({ out, stateFile }, text, state) {
     process.stdout.write('facts: state snapshot unavailable\n');
   }
   // A tier whose turn cap is 0 does not run the model.
-  tierOutput(state.maxTurns > 0 ? state.tier : 'none', state.maxTurns, withheldDenies(process.cwd()));
+  tierOutput(state.maxTurns > 0 ? state.tier : 'none', state.maxTurns, withheldDenies(process.cwd()), modelTools(activeProject().config, { out: resolve(out) }));
 }
 
 // This run's routed link types (the files it considered) ride in both
