@@ -91,6 +91,12 @@ async function runChecks({ files, repoRoot, baseSha, headSha, title, baseDir, pr
   return [...builtin, ...(await runProjectChecks(projectChecks, { files, repoRoot, baseSha, headSha, mergeBase, title, config }))];
 }
 
+// claude-code-action runs the model only when the PR's copy of the workflow
+// is identical to the default branch's (its own workflow validation), so a PR
+// that edits the review workflow, or adds it, is not reviewed. Publish uses
+// this to say so instead of reporting a failed review.
+export const workflowEdited = (base, head) => base == null || head == null || base !== head;
+
 let tierWritten = false;
 const NO_TOOLS = { shell: 'off', allow: '' };
 // The review step runs only when this wrote a tier other than none. extra_deny
@@ -230,6 +236,7 @@ async function main() {
     const repoRoot = process.cwd();
     const { files: prFiles, hunkRanges } = readPrDiff(BASE_SHA, HEAD_SHA, repoRoot);
     state.hunkRanges = hunkRanges;
+    state.workflowEdited = workflowEdited(readOr(join(baseDir, project.config.workflowPath)), readAt(HEAD_SHA, project.config.workflowPath, repoRoot));
     const paths = [...new Set(prFiles.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
     state.changedFiles = paths.slice(0, MAX_CHANGED);
     setKnownPaths(paths);

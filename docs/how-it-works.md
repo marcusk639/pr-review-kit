@@ -1,6 +1,6 @@
 # How the automated PR review works
 
-**Version 1.1.0** · pr-review-kit · 2026-10-30 · Covers kit `main` after the recovery-platform migration
+**Version 1.2.0** · pr-review-kit · 2026-10-30 · Covers kit `main` after the recovery-platform migration
 (opt-in suggestions, model tools, Serena and reference files)
 
 ---
@@ -835,6 +835,15 @@ Cause: a text rewrite touched expressions, env names and kit inputs alike.
 Fix: keep env var names `GITHUB_TOKEN`; reference `${{ github.token }}` or `${{ secrets.GH_TOKEN }}`; never set a
 token in job or workflow `env:`. `validate` enforces placement. Policy: `docs/github-tokens.md`.
 
+**[BUG] A PR that edits the review workflow is not reviewed**
+Symptom: on a PR that changes the review workflow (adding it, or moving the kit pin), the summary says "not
+reviewed: this PR changes the review workflow"; the job log shows claude-code-action's "Skipping action due to
+workflow validation".
+Cause: claude-code-action runs the model only when the PR's copy of the workflow is identical to the default
+branch's. Facts records `workflowEdited` (base vs head workflow file) and publish reports the skip instead of a
+failed review; the prior ledger is kept.
+Fix: intended upstream behaviour. Review such PRs by hand; reviews resume on PRs opened after it merges.
+
 **[BUG] Review marked incomplete after a rate limit**
 Symptom: the summary says "review did not complete"; no new findings appear.
 Cause: claude-code-action hit a usage limit or max turns; `completion.mjs` detects it from the execution file.
@@ -862,5 +871,6 @@ Fix: push again or re-run the job later; the prior ledger is kept. Raise `tiers.
 
 | Version | Date       | Change                                                                                                                                                                       |
 | ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.2.0   | 2026-10-30 | A PR that edits the review workflow is reported as not reviewed (claude-code-action skips it), not as a failed review                                                        |
 | 1.1.0   | 2026-10-30 | Opt-in capabilities (5.4) ported from recovery-platform: suggestions and Medium inline, gh read, reply, Serena, reference files; the lost-comments notice names `inline.max` |
 | 1.0.0   | 2026-10-27 | First version: pipeline, security model, learning loop, file index                                                                                                           |
