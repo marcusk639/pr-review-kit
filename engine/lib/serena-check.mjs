@@ -38,7 +38,13 @@ export const SERENA_TOOLS = ['find_symbol', 'find_referencing_symbols', 'get_sym
 const FORBIDDEN_PROJECT_KEYS = ['activation_command', 'excluded_tools', 'included_optional_tools', 'ls_specific_settings', 'included_apis'];
 const GLOBAL_LINES = ['web_dashboard: false', 'web_dashboard_open_on_launch: false', 'gui_log_window: false', 'trusted_project_path_patterns: []', 'base_modes: []'];
 
-const has = (text, line) => text.split('\n').some((l) => l.trimEnd() === line);
+// The required line, and no other line setting the same top-level key (a
+// later duplicate would win in a last-key-wins YAML loader).
+const has = (text, line) => {
+  const key = line.slice(0, line.indexOf(':') + 1);
+  const lines = text.split('\n').map((l) => l.trimEnd());
+  return lines.includes(line) && lines.filter((l) => l.startsWith(key)).length === 1;
+};
 // A key with a non-empty value (inline, or an indented block under it).
 const setKey = (text, key) => new RegExp(`^${key}:[ \\t]*(?:[^\\s#\\[]|\\[\\s*[^\\s\\]])`, 'm').test(text) || new RegExp(`^${key}:[ \\t]*\\n[ \\t]+-`, 'm').test(text);
 

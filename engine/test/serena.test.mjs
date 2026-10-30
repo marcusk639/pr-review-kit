@@ -171,3 +171,10 @@ test('projectCopyList keeps the trust .pr-review/ minus Serena state and withhel
   const paths = ['.pr-review/REVIEW.md', '.pr-review/serena/project.yml', '.pr-review/.serena/cache', '.pr-review/private/notes.md', 'src/a.ts', ''];
   assert.deepEqual(projectCopyList(paths, c), ['.pr-review/REVIEW.md', '.pr-review/serena/project.yml']);
 });
+
+test('an existing serena-runner (a reused runner) means no Serena, and the copies never carry symlinks', () => {
+  const guard = at('if id "$SR_USER" >/dev/null 2>&1; then');
+  assert.ok(guard < at('sudo useradd'));
+  assert.match(setup.slice(guard), /^if id [^\n]*\n[^\n]*::warning::[^\n]*\n\s+exit 0\n/);
+  assert.equal(setup.split('sudo rsync -a --no-links ').length, 3, 'both copies use --no-links');
+});

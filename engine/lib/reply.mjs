@@ -73,8 +73,19 @@ function textProblem(text) {
 // Publish-only, so no path can be tested against them here. While facts' snapshot holds a
 // security entry (any status: Publish keeps withholding its files), or the snapshot or the
 // prior state cannot be read, a reply may name no file at all.
-const FILE_EXT = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'json', 'rules', 'yml', 'yaml', 'md', 'mdx', 'sh', 'py', 'rb', 'swift', 'm', 'mm', 'h', 'kt', 'java', 'gradle', 'plist', 'xml', 'html', 'css', 'scss', 'env', 'lock', 'toml', 'txt', 'sql', 'pem']);
-const namesFile = (p) => p.parts.length > 1 || FILE_EXT.has(String(p.parts.at(-1) ?? '').split('.').slice(1).pop() ?? '');
+// Any path, or any name with an extension, counts as a file (the kit serves
+// every language, so no fixed extension list); so do the common
+// extensionless file names. Over-matching only refuses more replies.
+// An extension starts with a letter (not "v1.7.0"), and a one-letter stem with
+// a one-letter extension is an abbreviation ("e.g", "i.e"), not a file.
+const EXT_RE = /^(.+)\.([a-z][a-z0-9_+-]{0,11})$/;
+const namesFile = (p) => {
+  if (p.parts.length > 1) return true;
+  const m = EXT_RE.exec(String(p.parts.at(-1) ?? ''));
+  return Boolean(m) && (m[1].length > 1 || m[2].length > 1);
+};
+const BARE_FILE_RE = /\b(?:Dockerfile|Containerfile|Makefile|Procfile|Gemfile|Rakefile|Podfile|Brewfile|Jenkinsfile|Vagrantfile|Justfile|CODEOWNERS)\b/i;
+const namesAnyFile = (text) => pathTokens(text).some(namesFile) || BARE_FILE_RE.test(text);
 
 function priorSecurityMayApply(env, fs) {
   if (!env.STATE_FILE) return true;
@@ -133,7 +144,7 @@ export async function runReply({ argv = [], env = {}, project, request, fs = { l
   const sec = securityProblem(text, parsed.value.findings);
   if (sec) return refuse(sec);
   if (namesWithheld(text, project)) return refuse('reply names a withheld path');
-  if (pathTokens(text).some(namesFile) && priorSecurityMayApply(env, fs)) {
+  if (namesAnyFile(text) && priorSecurityMayApply(env, fs)) {
     return refuse('reply names a file while an earlier security finding may apply; describe it without a path');
   }
 

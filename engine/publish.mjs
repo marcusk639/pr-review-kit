@@ -20,6 +20,7 @@ import { stepSummary, warn } from './lib/status.mjs';
 import { touchesSecurityFile } from './lib/needles.mjs';
 import { priorFileIds, runNeedles } from './lib/fileids.mjs';
 import { runInline, INLINE_NOTICE } from './lib/inline-stage.mjs';
+import { runReplyGuard } from './lib/reply-guard.mjs';
 import { deliverAdvisories } from './advisories.mjs';
 import { activeProject } from './lib/config.mjs';
 
@@ -208,6 +209,8 @@ async function publishRun({ repo, pr, snapshot: trusted, advisoryToken, ...rest 
   const headSha = head ?? sha(snapshot?.headSha);
   const findings = completedFindings(snapshot, rest.findingsText, rest.outcome, rest.narrative)?.findings ?? null;
   const inline = await runInline({ repo, pr, snapshot, findings, inlineText: rest.inlineText, idKey: rest.idKey, headSha, runStartedAt: rest.runStartedAt }, deps);
+  const reply = await runReplyGuard({ repo, pr, snapshot, findings, idKey: rest.idKey, runStartedAt: rest.runStartedAt }, deps);
+  if (reply.removed) extra.push(`${reply.removed} reply comment(s) removed`);
   if (inline.notPosted) {
     warn(`${inline.notPosted} inline comment(s) not posted`);
     extra.push(`${inline.notPosted} inline comment(s) not posted`);
@@ -217,7 +220,7 @@ async function publishRun({ repo, pr, snapshot: trusted, advisoryToken, ...rest 
     warn('security advisories not delivered');
     extra.push('advisories not delivered');
   }
-  const notices = [...(prior.notice ? [prior.notice] : []), ...inline.notices];
+  const notices = [...(prior.notice ? [prior.notice] : []), ...inline.notices, ...reply.notices];
   const body = composeBody({ ...rest, state: snapshot, fallback, securityClause: clause, resolvedIds, notices, inlinePosted: inline.posted, rawMarker: prior.rawMarker ?? null });
   const ok = await postSummary(repo, pr, body, deps.upsertSummary, { headSha, previousMarker: previousMarker(snapshot, fallback, prior.rawMarker, rest.idKey || null) });
   const label = `${outcomeLabel(snapshot, rest)}${tierOf(snapshot)}`;

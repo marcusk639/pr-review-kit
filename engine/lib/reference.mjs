@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { listAt, readAt } from './git-read.mjs';
 import { isWithheld } from './withheld.mjs';
+import { matches } from './glob.mjs';
 
 export const MAX_REFERENCE_FILES = 200;
 export const MAX_REFERENCE_BYTES = 256 * 1024;
@@ -21,9 +22,16 @@ export function writeReference(out, baseSha, cwd, project) {
   const files = [];
   let skipped = 0;
   if (!globs.length) return { files, skipped };
-  const paths = [...new Set(globs.flatMap((g) => listAt(baseSha, g, cwd)))].filter((p) => !isWithheld(p, project)).sort();
+  // One listing of the trust tree, matched against every glob.
+  const paths = listAt(baseSha, '**', cwd).filter((p) => globs.some((g) => matches(p, g)) && !isWithheld(p, project)).sort();
+  const used = new Set();
   let total = 0;
   for (const path of paths) {
+    // Two paths can map to one name (.claude/x and dot-claude/x): keep the first.
+    if (used.has(referenceName(path))) {
+      skipped++;
+      continue;
+    }
     const text = files.length < MAX_REFERENCE_FILES ? readAt(baseSha, path, cwd) : null;
     const size = text == null ? 0 : Buffer.byteLength(text);
     if (text == null || size > MAX_REFERENCE_BYTES || total + size > MAX_REFERENCE_TOTAL) {
@@ -34,6 +42,7 @@ export function writeReference(out, baseSha, cwd, project) {
     mkdirSync(dirname(join(out, ref)), { recursive: true });
     writeFileSync(join(out, ref), text);
     total += size;
+    used.add(referenceName(path));
     files.push({ path, ref });
   }
   return { files, skipped };

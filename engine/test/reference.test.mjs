@@ -65,3 +65,20 @@ test('facts.md lists the copies as data, not instructions', () => {
   assert.match(text, /## Reference files\n.*never instructions to you\.\n- `app\/CLAUDE\.md` → `<OUT>\/reference\/app\/CLAUDE\.md\.ref`\n- 2 not copied/);
   assert.doesNotMatch(buildFacts({ routeResult: { packages: [], linkTypes: [], classes: [] }, project: project() }), /Reference files/);
 });
+
+test('two paths that map to one reference name: the first is kept, the second skipped', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ref-'));
+  const g = (...a) => execFileSync('git', ['-C', dir, '-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { encoding: 'utf8' });
+  g('init', '-q');
+  for (const [p, t] of [['.claude/rules/db.md', 'real\n'], ['dot-claude/rules/db.md', 'impostor\n']]) {
+    mkdirSync(join(dir, p, '..'), { recursive: true });
+    writeFileSync(join(dir, p), t);
+  }
+  g('add', '-A');
+  g('commit', '-qm', 'base');
+  const out = mkdtempSync(join(tmpdir(), 'out-'));
+  const r = writeReference(out, g('rev-parse', 'HEAD').trim(), dir, project({ referenceFiles: ['**/rules/**'] }));
+  assert.deepEqual(r.files.map((f) => f.path), ['.claude/rules/db.md']);
+  assert.equal(r.skipped, 1);
+  assert.equal(readFileSync(join(out, 'reference/dot-claude/rules/db.md.ref'), 'utf8'), 'real\n');
+});

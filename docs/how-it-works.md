@@ -350,14 +350,14 @@ run's findings.
 **[SPEC]**
 Every one is off by default; a project turns it on in its trusted config (or, for Serena, the workflow input).
 
-| Capability      | Turn on                                          | What changes                                                                                                                                                                                                                                                                                |
-| --------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Medium inline   | `inline.severities` includes `Medium`            | Medium findings may get inline comments. Critical and High entries are always placed first under `inline.max`; only Critical/High drops are announced                                                                                                                                       |
-| Suggestions     | `inline.suggestions.enabled: true`               | An `inline.json` entry may carry `start_line` and `suggestion`. Publish fences it only inside one trusted hunk, within the size caps, never on `.github/**`, `.pr-review/**`, any `.claude/`, manifests, lockfiles, `blockedPaths`, or paths routed to a security class or `blockedClasses` |
-| gh read         | `model.ghRead: true`                             | `Bash(gh pr diff:*)` and `Bash(gh pr view:*)`, nothing else. Not allowed with `withheld` paths (the diff would show them)                                                                                                                                                                   |
-| Reply           | `model.reply: true`                              | `Bash(node <kit>/engine/reply.mjs)` and `Write`/`Edit` of `OUT/reply.md`. One comment per run, refused unless it starts `pr-review:` and names no secret, security slug or file, withheld path, or (while the ledger has a security entry) any file                                         |
-| Serena          | action input `serena: on` + `.pr-review/serena/` | Four read-only lookups through an MCP server run as `serena-runner`: empty environment, no network (iptables), a root-owned copy of tracked files minus `serena.exclude` and `withheld`; isolation probes before any output; publish refuses if a process survives                          |
-| Reference files | `referenceFiles: [globs]`                        | Matching files at the trust SHA are copied to `OUT/reference/` (`.ref`, `.claude` → `dot-claude`) and listed in `facts.md` as data                                                                                                                                                          |
+| Capability      | Turn on                                          | What changes                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Medium inline   | `inline.severities` includes `Medium`            | Medium findings may get inline comments. Critical and High entries are always placed first under `inline.max`; only Critical/High drops are announced                                                                                                                                                                                                                        |
+| Suggestions     | `inline.suggestions.enabled: true`               | An `inline.json` entry may carry `start_line` and `suggestion`. Publish fences it only inside one trusted hunk, within the size caps, never on `.github/**`, `.pr-review/**`, any `.claude/`, manifests, lockfiles, `blockedPaths`, or paths routed to a security class or `blockedClasses`                                                                                  |
+| gh read         | `model.ghRead: true`                             | `Bash(gh pr diff:*)` and `Bash(gh pr view:*)`, nothing else. Not allowed with `withheld` paths (the diff would show them)                                                                                                                                                                                                                                                    |
+| Reply           | `model.reply: true`                              | `Bash(node <kit>/engine/reply.mjs)` and `Write`/`Edit` of `OUT/reply.md`. One comment per run, refused unless it starts `pr-review:` and names no secret, security slug or file, withheld path, or (while the ledger has a security entry) any file. Publish re-checks it against the final findings and prior security files and deletes it if it leaks (`reply-guard.mjs`) |
+| Serena          | action input `serena: on` + `.pr-review/serena/` | Four read-only lookups through an MCP server run as `serena-runner`: empty environment, no network (iptables), a root-owned copy of tracked files minus `serena.exclude` and `withheld`; isolation probes before any output; publish refuses if a process survives                                                                                                           |
+| Reference files | `referenceFiles: [globs]`                        | Matching files at the trust SHA are copied to `OUT/reference/` (`.ref`, `.claude` → `dot-claude`) and listed in `facts.md` as data                                                                                                                                                                                                                                           |
 
 **[NOTE]**
 The reply is the one exception to "the model never posts". It goes through kit code from the pinned action path,
@@ -474,7 +474,7 @@ only in the publish step.
 | A security finding becomes public                                       | Pointer-only summary, private channel, HMAC ids, needle withholding                                     | section 6.3–6.4                             |
 | Feedback text instructs the reviewer                                    | Feedback is quoted data; instruction-shaped text is never a lesson candidate                            | `feedback.mjs`, `candidates.mjs`            |
 | A pusher forges a learning PR to skip self-edit review                  | Exemption needs API-verified bot author and committer **and** a GitHub-verified signature               | `learning-pr.mjs`                           |
-| The model's reply leaks detail or posts a chosen file (opt-in)          | Kit-owned command, body only from `OUT/reply.md`, refusal rules, one per run                            | `reply.mjs`, `lib/reply.mjs`                |
+| The model's reply leaks detail or posts a chosen file (opt-in)          | Kit-owned command, body only from `OUT/reply.md`, refusal rules, one per run                            | `reply.mjs`, `reply-guard.mjs`              |
 | Serena reads credentials or phones home (opt-in)                        | Separate user, empty env, iptables, chmod 700 on `.git`/`RUNNER_TEMP`, probes; publish stop guard       | review action, `serena-prep.mjs`            |
 | Secrets in logs                                                         | Logs carry status codes and counts only; tokens never on command lines                                  | every publishing module                     |
 
@@ -652,7 +652,7 @@ recovery-platform's original reviewer wherever it had a setting.
 ## 11. Index of `.mjs` files
 
 **[SPEC]**
-73 non-test modules. Lines are approximate. "Entry" marks a file run directly by an action or a person.
+74 non-test modules. Lines are approximate. "Entry" marks a file run directly by an action or a person.
 
 ### 11.1 `bin/` (command-line tools)
 
@@ -767,6 +767,7 @@ Grouped by concern.
 | `suggestion.mjs`   | Suggestion rules: blocked paths and classes, one-hunk range, size, fence         |
 | `hunks.mjs`        | RIGHT-side hunk ranges of the PR diff, for the trusted snapshot                  |
 | `reply.mjs`        | The reply's refusal rules and one-per-run lock (`engine/reply.mjs` runs it)      |
+| `reply-guard.mjs`  | Publish's post-hoc check: deletes this run's reply if it names a security file   |
 | `inline-guard.mjs` | Pre-filter (`unsafeInline`) and post-hoc deletion of unsafe bot inline comments  |
 | `inline-stage.mjs` | Runs post-then-guard and returns posted slugs and notices for the summary        |
 | `render.mjs`       | Renders the one public summary comment (redacted, marker-safe, capped)           |

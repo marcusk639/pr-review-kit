@@ -251,3 +251,16 @@ test('gh read cannot be combined with withheld paths', () => {
   const { errors } = normalizeConfig({ ...JSON.parse(JSON.stringify(RP.config)), model: { ghRead: true }, withheld: ['clients/**'] });
   assert.ok(errors.some((e) => e.includes('model.ghRead cannot be combined with withheld')));
 });
+
+test('any extension or a common extensionless name counts as a file while a prior security entry may apply', async () => {
+  for (const reply of ['pr-review: the issue is in session.go', 'pr-review: see main.rs', 'pr-review: it is the Dockerfile', 'pr-review: check app.vue', 'pr-review: build.kts sets it']) {
+    const s = setup({ reply, state: PRIOR_SECURITY });
+    const { result, calls } = await run(s);
+    assert.equal(result.posted, false, reply);
+    assert.equal(calls.length, 0, reply);
+  }
+  for (const reply of ['pr-review: yes, i.e. it retries once.', 'pr-review: fixed since v2.4.1.']) {
+    const s = setup({ reply, state: PRIOR_SECURITY });
+    assert.equal((await run(s)).result.posted, true, reply);
+  }
+});

@@ -173,6 +173,12 @@ runs:
           exit 0
         fi
         node "$KIT_ROOT/engine/serena-prep.mjs" warmup "$warm"
+        # A user left by an earlier run (a reused or self-hosted runner) may own processes
+        # and files this run cannot vouch for: review without Serena instead.
+        if id "$SR_USER" >/dev/null 2>&1; then
+          echo "::warning::$SR_USER already exists on this runner; reviewing without code navigation"
+          exit 0
+        fi
         sudo useradd --create-home --shell /usr/sbin/nologin "$SR_USER"
         sudo chmod 700 "$SR_HOME"
         SR_PATH="$SR_HOME/.local/bin:$(dirname "$(command -v uv)"):$(dirname "$(command -v node)"):/usr/local/bin:/usr/bin:/bin"
@@ -206,10 +212,10 @@ runs:
         # files it does not have: copy the trust tree explicitly instead.
         # --ignore-missing-args: a tracked path absent from the working tree is skipped, not fatal.
         node "$KIT_ROOT/engine/serena-prep.mjs" files \
-          | sudo rsync -a --no-owner --no-group --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r --ignore-missing-args --from0 --files-from=- ./ "$SR_HOME/src/"
+          | sudo rsync -a --no-links --no-owner --no-group --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r --ignore-missing-args --from0 --files-from=- ./ "$SR_HOME/src/"
         # The trust copy of .pr-review/, minus .serena/ and withheld paths (serena-prep.mjs project-files).
         node "$KIT_ROOT/engine/serena-prep.mjs" project-files \
-          | sudo rsync -a --no-owner --no-group --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r --from0 --files-from=- .review-base/ "$SR_HOME/src/"
+          | sudo rsync -a --no-links --no-owner --no-group --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r --from0 --files-from=- .review-base/ "$SR_HOME/src/"
         sudo chown -R root:root "$SR_HOME/src"
         sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/src/.serena"
         sudo install -o "$SR_USER" -m 600 "$cfg/project.yml" "$SR_HOME/src/.serena/project.yml"

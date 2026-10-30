@@ -43,6 +43,8 @@ test('each lockdown property is required', () => {
     ['prompt_templates/prompt.yml', (t) => t.replace(/connection_prompt: \|\n[\s\S]*$/, 'connection_prompt: |\n'), /override is empty/],
     ['prompt_templates/prompt.yml', null, /exactly one connection_prompt override \(found 0\)/],
     ['serena_config.yml', null, /serena_config\.yml is missing/],
+    ['project.yml', (t) => `${t}\nread_only: false\n`, /read_only: true/],
+    ['serena_config.yml', (t) => `${t}\nweb_dashboard: true\n`, /web_dashboard: false/],
   ];
   for (const [file, edit, want] of cases) {
     const errors = broken(file, edit);
